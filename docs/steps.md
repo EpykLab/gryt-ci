@@ -39,6 +39,11 @@ Most steps accept these standard options via `config`:
 - `CargoTestStep(id, config={ 'release': bool, 'workspace': bool, 'all_features': bool, 'features': [str], ... })`
   - Runs `cargo test` with optional flags.
 
+## Containers
+- `ContainerBuildStep(id, config={ 'context_path': str, 'dockerfile': str='Dockerfile', 'tags': [str]|str, 'build_args': dict, 'labels': dict, 'platform': str, 'target': str, 'network': str, 'pull': bool, 'push': bool })`
+  - Builds a container image using the Docker SDK for Python (no shell calls). If the SDK or daemon is unavailable, returns a structured error with guidance. Optional push via the SDK.
+  - Note: The Docker SDK for Python is an optional dependency. Install with `pip install docker` in your environment.
+
 ## Notes
 - Steps store their results to the `steps_output` table by default when a Data instance is attached to the Step (either directly or via Runner).
 - Choose unique Step ids to avoid primary key collisions when using a persistent DB.

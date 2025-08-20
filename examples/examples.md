@@ -21,3 +21,6 @@ Language-focused examples demonstrate usage of language-specific steps. They req
 - language_node.py – NpmInstallStep / SvelteBuildStep
 - language_go.py – GoModDownloadStep / GoBuildStep / GoTestStep
 - language_rust.py – CargoBuildStep / CargoTestStep
+
+Containers:
+- container_build.py – Build a container image using the Docker SDK (requires docker daemon and `pip install docker`).

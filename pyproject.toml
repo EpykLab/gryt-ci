@@ -3,7 +3,9 @@ name = "gryt"
 version = "0.1.0"
 description = "gryt: Minimal MVP Python CI framework primitives (Data, Step, Runner, Pipeline, Runtime, Versioning)"
 requires-python = ">=3.8"
-dependencies = []
+dependencies = [
+    "setuptools>=61.0",
+]
 
 [build-system]
 requires = ["setuptools>=61.0"]

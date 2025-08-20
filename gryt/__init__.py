@@ -21,6 +21,7 @@ from .runtime import Runtime, LocalRuntime
 from .versioning import Versioning, SimpleVersioning
 from .hook import Hook, PrintHook, HttpHook
 from .destination import Destination, CommandDestination, NpmRegistryDestination, PyPIDestination, GitHubReleaseDestination
+from .containers import ContainerBuildStep
 from .steps import (
     GoModDownloadStep,
     GoBuildStep,
@@ -54,6 +55,8 @@ __all__ = [
     "NpmRegistryDestination",
     "PyPIDestination",
     "GitHubReleaseDestination",
+    # Containers
+    "ContainerBuildStep",
     # Language-specific steps
     "GoModDownloadStep",
     "GoBuildStep",
