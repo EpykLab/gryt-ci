@@ -1,0 +1,26 @@
+# GitLab CI starter for gryt
+# This pipeline validates and runs a gryt pipeline script.
+# Set PIPELINE_PATH to your script path (default examples/basic_pipeline.py).
+
+stages:
+  - validate
+  - run
+
+variables:
+  PIPELINE_PATH: "examples/basic_pipeline.py"
+
+image: python:3.11-slim
+
+before_script:
+  - python -m pip install --upgrade pip
+  - pip install .
+
+validate:
+  stage: validate
+  script:
+    - gryt validate "$PIPELINE_PATH"
+
+run:
+  stage: run
+  script:
+    - gryt run "$PIPELINE_PATH"

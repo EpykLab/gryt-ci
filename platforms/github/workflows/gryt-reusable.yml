@@ -1,0 +1,35 @@
+name: gryt reusable pipeline
+
+on:
+  workflow_call:
+    inputs:
+      pipeline_path:
+        description: 'Path to the Python script that defines the gryt Pipeline'
+        required: false
+        type: string
+        default: 'examples/basic_pipeline.py'
+
+jobs:
+  run-gryt:
+    runs-on: ubuntu-latest
+    env:
+      PIPELINE_PATH: ${{ inputs.pipeline_path }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install gryt (from repo)
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Validate pipeline
+        run: gryt validate "$PIPELINE_PATH"
+
+      - name: Run pipeline
+        run: gryt run "$PIPELINE_PATH"

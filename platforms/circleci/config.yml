@@ -1,0 +1,38 @@
+version: 2.1
+
+parameters:
+  pipeline_path:
+    type: string
+    default: "examples/basic_pipeline.py"
+
+executors:
+  python:
+    docker:
+      - image: cimg/python:3.11
+
+jobs:
+  run-gryt:
+    executor: python
+    environment:
+      PIPELINE_PATH: << pipeline.parameters.pipeline_path >>
+    steps:
+      - checkout
+      - run:
+          name: Upgrade pip
+          command: python -m pip install --upgrade pip
+      - run:
+          name: Install gryt (from repo)
+          command: pip install .
+      - run:
+          name: Validate pipeline
+          command: gryt validate "$PIPELINE_PATH"
+      - run:
+          name: Run pipeline
+          command: gryt run "$PIPELINE_PATH"
+
+workflows:
+  gryt_pipeline:
+    jobs:
+      - run-gryt:
+          name: run-gryt
+          pipeline_path: "examples/basic_pipeline.py"
