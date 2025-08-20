@@ -20,25 +20,27 @@ For development in this repository:
 
 ## Quickstart
 
-Initialize a sample pipeline in the current directory:
+Initialize a gryt project in the current directory and run a sample pipeline:
 
 Using the installed command:
 ```
 gryt init --force
-gryt validate pipeline.py
-gryt run pipeline.py
+# create a new pipeline in .gryt/pipelines
+gryt new --name example
+gryt validate example
+gryt run example
 ```
 
 Alternatively, module mode also works:
 ```
-python -m gryt.cli run pipeline.py
+python -m gryt.cli run .gryt/pipelines/example.py
 ```
 
-The sample pipeline runs two simple echo steps.
+The sample pipeline runs simple echo steps and writes to `./.gryt/gryt.db`.
 
 ## What’s Inside
 
-- CLI: `gryt init|validate|run` for creating and executing pipelines from Python scripts.
+- CLI: `gryt init|new|validate|run|db` for creating, executing, and inspecting pipelines/databases.
 - Primitives: Step, Runner, Pipeline, Data (SQLite), Runtime (Local), Versioning (simple semver with git tags).
 - Hooks: Observe lifecycle events; send logs/metrics to remote services.
 - Language Steps: Ready-made steps for Go, Python, Node/Svelte, and Rust.

@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: gryt
+Version: 0.1.0
+Summary: gryt: Minimal MVP Python CI framework primitives (Data, Step, Runner, Pipeline, Runtime, Versioning)
+Requires-Python: >=3.8
+Requires-Dist: setuptools>=61.0

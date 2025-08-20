@@ -1,0 +1,2 @@
+[console_scripts]
+gryt = gryt.cli:main
