@@ -8,8 +8,7 @@ import urllib.parse
 import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
-
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 PathLike = Union[str, Path]
 

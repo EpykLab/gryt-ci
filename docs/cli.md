@@ -29,8 +29,9 @@ When you initialize a project, gryt creates a hidden folder in your repo:
   - Creates `.gryt/` with `gryt.db`, `config`, and `pipelines/`.
   - `--force` will overwrite any existing `.gryt/` directory.
 
-- gryt new --name NAME [--force]
+- gryt new --name NAME [--force] [--steps LIST]
   - Create a pipeline file `.gryt/pipelines/NAME.py` with a basic example workflow (shebang + imports included).
+  - With `--steps`, you can quickly scaffold language-specific steps. Accepts a comma-separated list of presets: `go, python, js, docker, rust` (unknown tokens will generate placeholder CommandStep entries).
   - Use `--force` to overwrite if the file already exists.
 
 - gryt run SCRIPT [--parallel]
@@ -40,6 +41,9 @@ When you initialize a project, gryt creates a hidden folder in your repo:
 
 - gryt validate SCRIPT
   - Validate that the script exposes either a `PIPELINE` variable (gryt.Pipeline) or a `build() -> gryt.Pipeline` function.
+
+- gryt env-validate SCRIPT
+  - Validate the environment for a pipeline without running it. Aggregates all issues (no fail-fast) and prints a JSON report.
 
 - gryt db [--db PATH]
   - Dump the SQLite database contents to stdout as JSON for easy piping to other tools.
@@ -51,6 +55,8 @@ Initialize and run using the installed command:
 ```
 gryt init --force
 gryt new --name example
+# scaffold with presets
+gryt new --name myproj --steps go,python,js
 # run by bare name (resolves to .gryt/pipelines/example.py)
 gryt validate example
 gryt run example

@@ -21,6 +21,8 @@ from .runtime import Runtime, LocalRuntime
 from .versioning import Versioning, SimpleVersioning
 from .hook import Hook, PrintHook, HttpHook
 from .destination import Destination, CommandDestination, NpmRegistryDestination, PyPIDestination, GitHubReleaseDestination
+from .publish import PublishDestinationStep
+from .envvalidate import EnvValidator, EnvVarValidator, ToolValidator
 from .containers import ContainerBuildStep
 from .steps import (
     GoModDownloadStep,
@@ -55,6 +57,11 @@ __all__ = [
     "NpmRegistryDestination",
     "PyPIDestination",
     "GitHubReleaseDestination",
+    "PublishDestinationStep",
+    # Env validation
+    "EnvValidator",
+    "EnvVarValidator",
+    "ToolValidator",
     # Containers
     "ContainerBuildStep",
     # Language-specific steps

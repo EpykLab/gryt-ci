@@ -173,18 +173,17 @@ class ContainerBuildStep(Step):
 
             # Persist to data store if available
             if self.data:
-                try:
-                    self.data.create_table(
-                        "steps_output",
-                        {
-                            "id": "TEXT PRIMARY KEY",
-                            "result": "TEXT",
-                            "timestamp": "DATETIME DEFAULT CURRENT_TIMESTAMP",
-                        },
-                    )
-                except Exception:
-                    pass
-                self.data.insert("steps_output", {"id": self.id, "result": result})
+                self.data.insert(
+                    "steps_output",
+                    {
+                        "step_id": self.id,
+                        "runner_id": None,
+                        "name": self.id,
+                        "output_json": result,
+                        "status": result.get("status"),
+                        "duration": result.get("duration"),
+                    },
+                )
             return result
         except DockerException as e:  # noqa: F821
             err = {
@@ -192,18 +191,17 @@ class ContainerBuildStep(Step):
                 "error": str(e),
             }
             if self.data:
-                try:
-                    self.data.create_table(
-                        "steps_output",
-                        {
-                            "id": "TEXT PRIMARY KEY",
-                            "result": "TEXT",
-                            "timestamp": "DATETIME DEFAULT CURRENT_TIMESTAMP",
-                        },
-                    )
-                except Exception:
-                    pass
-                self.data.insert("steps_output", {"id": self.id, "result": err})
+                self.data.insert(
+                    "steps_output",
+                    {
+                        "step_id": self.id,
+                        "runner_id": None,
+                        "name": self.id,
+                        "output_json": err,
+                        "status": err.get("status"),
+                        "duration": None,
+                    },
+                )
             return err
         except Exception as e:  # noqa: BLE001
             err = {
@@ -211,18 +209,17 @@ class ContainerBuildStep(Step):
                 "error": str(e),
             }
             if self.data:
-                try:
-                    self.data.create_table(
-                        "steps_output",
-                        {
-                            "id": "TEXT PRIMARY KEY",
-                            "result": "TEXT",
-                            "timestamp": "DATETIME DEFAULT CURRENT_TIMESTAMP",
-                        },
-                    )
-                except Exception:
-                    pass
-                self.data.insert("steps_output", {"id": self.id, "result": err})
+                self.data.insert(
+                    "steps_output",
+                    {
+                        "step_id": self.id,
+                        "runner_id": None,
+                        "name": self.id,
+                        "output_json": err,
+                        "status": err.get("status"),
+                        "duration": None,
+                    },
+                )
             return err
         finally:
             try:

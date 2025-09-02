@@ -4,3 +4,4 @@ Version: 0.1.0
 Summary: gryt: Minimal MVP Python CI framework primitives (Data, Step, Runner, Pipeline, Runtime, Versioning)
 Requires-Python: >=3.8
 Requires-Dist: setuptools>=61.0
+Requires-Dist: typer>=0.12

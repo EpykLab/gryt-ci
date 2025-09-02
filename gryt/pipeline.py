@@ -20,6 +20,7 @@ class Pipeline:
         versioning: Optional[Versioning] = None,
         hook: Optional["Hook"] = None,
         destinations: Optional[List["Destination"]] = None,
+        validators: Optional[List["EnvValidator"]] = None,
     ) -> None:
         self.runners = runners
         self.data = data
@@ -27,6 +28,25 @@ class Pipeline:
         self.versioning = versioning
         self.hook = hook
         self.destinations = destinations or []
+        self.validators = validators or []
+
+    def validate_environment(self) -> Dict[str, Any]:
+        """Run all configured validators and return a report without raising."""
+        issues: List[Dict[str, Any]] = []
+        for v in self.validators:
+            try:
+                for iss in v.run():
+                    issues.append(
+                        {
+                            "kind": getattr(iss, "kind", "unknown"),
+                            "name": getattr(iss, "name", ""),
+                            "message": getattr(iss, "message", ""),
+                            "details": getattr(iss, "details", None),
+                        }
+                    )
+            except Exception as e:  # noqa: BLE001
+                issues.append({"kind": "validator_error", "name": type(v).__name__, "message": str(e)})
+        return {"status": "ok" if not issues else "invalid_env", "issues": issues}
 
     def execute(self, parallel: bool = False, artifacts: Optional[List["PathLike"]] = None) -> Dict[str, Any]:
         # Inject pipeline-level hook and data into steps if missing
@@ -36,6 +56,13 @@ class Pipeline:
                     s.data = self.data
                 if self.hook is not None and getattr(s, "hook", None) is None:
                     s.hook = self.hook
+        # Pre-run environment validation (aggregate issues, no fail-fast)
+        if self.validators:
+            env_report = self.validate_environment()
+            if env_report.get("status") != "ok":
+                # Do not proceed with execution; fail early but include all issues
+                return env_report
+
         if self.hook:
             try:
                 self.hook.on_pipeline_start(self, context=None)

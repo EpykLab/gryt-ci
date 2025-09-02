@@ -6,6 +6,7 @@ gryt/data.py
 gryt/destination.py
 gryt/hook.py
 gryt/pipeline.py
+gryt/publish.py
 gryt/runner.py
 gryt/runtime.py
 gryt/step.py

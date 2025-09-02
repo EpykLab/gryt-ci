@@ -74,19 +74,18 @@ class CommandStep(Step):
                     "attempts": attempt + 1,
                 }
                 if self.data:
-                    try:
-                        self.data.create_table(
-                            "steps_output",
-                            {
-                                "id": "TEXT PRIMARY KEY",
-                                "result": "TEXT",
-                                "timestamp": "DATETIME DEFAULT CURRENT_TIMESTAMP",
-                            },
-                        )
-                    except Exception:
-                        # Table may already exist, ignore errors here
-                        pass
-                    self.data.insert("steps_output", {"id": self.id, "result": result})
+                    # Insert into predefined steps_output table
+                    self.data.insert(
+                        "steps_output",
+                        {
+                            "step_id": self.id,
+                            "runner_id": None,
+                            "name": self.id,
+                            "output_json": result,
+                            "status": result.get("status"),
+                            "duration": duration,
+                        },
+                    )
                 return result
             except Exception as e:  # noqa: BLE001
                 last_error = str(e)
@@ -101,16 +100,15 @@ class CommandStep(Step):
                         "attempts": attempt,
                     }
                     if self.data:
-                        try:
-                            self.data.create_table(
-                                "steps_output",
-                                {
-                                    "id": "TEXT PRIMARY KEY",
-                                    "result": "TEXT",
-                                    "timestamp": "DATETIME DEFAULT CURRENT_TIMESTAMP",
-                                },
-                            )
-                        except Exception:
-                            pass
-                        self.data.insert("steps_output", {"id": self.id, "result": result})
+                        self.data.insert(
+                            "steps_output",
+                            {
+                                "step_id": self.id,
+                                "runner_id": None,
+                                "name": self.id,
+                                "output_json": result,
+                                "status": result.get("status"),
+                                "duration": duration,
+                            },
+                        )
                     return result
