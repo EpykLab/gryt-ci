@@ -14,6 +14,7 @@ keep APIs simple, well-typed, and serializable for humans and AI agents.
 """
 
 from .data import SqliteData, Data
+from .languages.node import NpmBuildStep
 from .step import Step, CommandStep
 from .runner import Runner
 from .pipeline import Pipeline
@@ -71,6 +72,7 @@ __all__ = [
     "PipInstallStep",
     "PytestStep",
     "NpmInstallStep",
+    "NpmBuildStep",
     "SvelteBuildStep",
     "CargoBuildStep",
     "CargoTestStep",

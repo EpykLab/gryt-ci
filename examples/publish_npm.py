@@ -20,6 +20,6 @@ npm_dest = NpmRegistryDestination('npm_publish', {
 PIPELINE = Pipeline([runner], runtime=LocalRuntime(), destinations=[npm_dest])
 
 if __name__ == '__main__':
-    # npm publish uses package_dir; artifacts list is not required
+    # npm publish uses package_dir; artifact list is not required
     out = PIPELINE.execute(artifacts=[])
     print(out)

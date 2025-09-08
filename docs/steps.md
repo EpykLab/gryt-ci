@@ -45,6 +45,7 @@ Most steps accept these standard options via `config`:
   - Note: The Docker SDK for Python is an optional dependency. Install with `pip install docker` in your environment.
 
 ## Notes
-- Steps store their results to the `steps_output` table by default when a Data instance is attached to the Step (either directly or via Runner).
+- Live output streaming: when you run pipelines with `gryt run ... --show`, most steps that wrap shell commands stream their stdout/stderr live to your terminal. This includes CommandStep and language wrappers (Go, Node, Python, Rust). ContainerBuildStep also streams Docker build/push output via the SDK.
+- Steps store their results to the `steps_output` table by default when a Data instance is attached to the Step (either directly or via Runner). For command-like steps, stdout and stderr are also saved in dedicated `stdout`/`stderr` columns (in addition to the full structured `output_json`).
 - Choose unique Step ids to avoid primary key collisions when using a persistent DB.
 - Steps can take an optional `hook` to send lifecycle events to logs or remote services. See docs/hooks.md.

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "gryt: Minimal MVP Python CI framework primitives (Data, Step, Runner, Pipeline, Runtime, Versioning)"
 requires-python = ">=3.8"
 dependencies = [
+    "docker>=7.1.0",
     "setuptools>=61.0",
     "typer>=0.12",
 ]

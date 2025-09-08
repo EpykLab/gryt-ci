@@ -33,7 +33,7 @@ class CargoBuildStep(Step):
         if target:
             cmd += ["--target", target]
 
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__cargobuild",
             config={
                 "cmd": cmd,
@@ -43,7 +43,12 @@ class CargoBuildStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()
 
 
 class CargoTestStep(Step):
@@ -74,7 +79,7 @@ class CargoTestStep(Step):
         if features:
             cmd += ["--features", ",".join(features)]
 
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__cargotest",
             config={
                 "cmd": cmd,
@@ -84,4 +89,9 @@ class CargoTestStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()

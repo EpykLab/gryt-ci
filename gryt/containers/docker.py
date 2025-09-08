@@ -104,16 +104,24 @@ class ContainerBuildStep(Step):
 
             stream = low.build(**build_params)
             # stream is a generator of dicts when decode=True; otherwise bytes
+            show = bool(getattr(self, "show", False))
             for chunk in stream:
                 if isinstance(chunk, (bytes, bytearray)):
                     # Best-effort decoding
                     try:
                         msg = chunk.decode("utf-8", errors="ignore")
                         logs.append({"stream": msg})
+                        if show:
+                            print(msg, end="", flush=True)
                     except Exception:
                         logs.append({"raw": "<binary>"})
                 else:
                     logs.append(chunk)
+                    # Also print text messages if requested
+                    if show:
+                        text = chunk.get("stream") or chunk.get("status") or chunk.get("errorDetail", {}).get("message")
+                        if text:
+                            print(str(text), end="\n" if not str(text).endswith("\n") else "", flush=True)
                     # Try to capture image id from aux events
                     aux = chunk.get("aux") if isinstance(chunk, dict) else None
                     if isinstance(aux, dict) and aux.get("ID"):
@@ -156,8 +164,12 @@ class ContainerBuildStep(Step):
                     try:
                         # client.images.push returns a string stream; use low-level for decode
                         for line in client.api.push(repository=t, stream=True, decode=True):
-                            # accumulate last line per tag
                             push_results.setdefault(t, []).append(line)
+                            if bool(getattr(self, "show", False)):
+                                # Print status lines from push as they arrive
+                                text = line.get("status") or line.get("errorDetail", {}).get("message") or line.get("progressDetail")
+                                if text:
+                                    print(str(text), flush=True)
                     except Exception as e:  # noqa: BLE001
                         push_results[t] = [{"error": str(e)}]
 
@@ -180,6 +192,8 @@ class ContainerBuildStep(Step):
                         "runner_id": None,
                         "name": self.id,
                         "output_json": result,
+                        "stdout": "\n".join([e.get("stream", "") if isinstance(e, dict) else str(e) for e in result.get("logs", [])])[:100000],
+                        "stderr": None,
                         "status": result.get("status"),
                         "duration": result.get("duration"),
                     },
@@ -198,6 +212,8 @@ class ContainerBuildStep(Step):
                         "runner_id": None,
                         "name": self.id,
                         "output_json": err,
+                        "stdout": None,
+                        "stderr": err.get("error"),
                         "status": err.get("status"),
                         "duration": None,
                     },
@@ -216,6 +232,8 @@ class ContainerBuildStep(Step):
                         "runner_id": None,
                         "name": self.id,
                         "output_json": err,
+                        "stdout": None,
+                        "stderr": err.get("error"),
                         "status": err.get("status"),
                         "duration": None,
                     },

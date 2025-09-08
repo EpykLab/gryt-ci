@@ -33,7 +33,7 @@ class PipInstallStep(Step):
         else:
             cmd += packages
 
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__pipinstall",
             config={
                 "cmd": cmd,
@@ -43,7 +43,12 @@ class PipInstallStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()
 
 
 class PytestStep(Step):
@@ -62,7 +67,7 @@ class PytestStep(Step):
 
         cmd: List[str] = ["pytest"] + args + paths
 
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__pytest",
             config={
                 "cmd": cmd,
@@ -72,4 +77,9 @@ class PytestStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()

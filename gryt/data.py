@@ -12,7 +12,7 @@ class Data(ABC):
     """
     Abstract data store.
 
-    For MVP we implement a SQLite-backed store with simple helpers
+    For MVP, we implement an SQLite-backed store with simple helpers
     for creating tables, inserting JSON-friendly data, querying, and updating.
     """
 
@@ -119,6 +119,8 @@ class SqliteData(Data):
                         runner_id TEXT,
                         name TEXT,
                         output_json TEXT,
+                        stdout TEXT,
+                        stderr TEXT,
                         status TEXT,
                         duration REAL,
                         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -143,6 +145,8 @@ class SqliteData(Data):
                             runner_id TEXT,
                             name TEXT,
                             output_json TEXT,
+                            stdout TEXT,
+                            stderr TEXT,
                             status TEXT,
                             duration REAL,
                             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -159,6 +163,21 @@ class SqliteData(Data):
                     )
                     self.conn.execute("DROP TABLE steps_output")
                     self.conn.execute("ALTER TABLE steps_output_new RENAME TO steps_output")
+                # Ensure stdout/stderr columns exist on current table
+                info2 = self.conn.execute("PRAGMA table_info(steps_output)").fetchall()
+                cols2 = {row[1] if isinstance(row, tuple) else row["name"]: row for row in info2}
+                if "stdout" not in cols2:
+                    self.conn.execute("ALTER TABLE steps_output ADD COLUMN stdout TEXT")
+                    try:
+                        getattr(self, "_last_migrations_applied", []).append("add steps_output.stdout column")
+                    except Exception:
+                        pass
+                if "stderr" not in cols2:
+                    self.conn.execute("ALTER TABLE steps_output ADD COLUMN stderr TEXT")
+                    try:
+                        getattr(self, "_last_migrations_applied", []).append("add steps_output.stderr column")
+                    except Exception:
+                        pass
             # versions
             self.conn.execute(
                 """

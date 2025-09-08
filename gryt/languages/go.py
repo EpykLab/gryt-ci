@@ -18,7 +18,7 @@ class GoModDownloadStep(Step):
     def run(self) -> Dict[str, Any]:
         cfg = self.config
         cmd = ["go", "mod", "download"]
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__gomoddownload",
             config={
                 "cmd": cmd,
@@ -28,7 +28,12 @@ class GoModDownloadStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()
 
 
 class GoBuildStep(Step):
@@ -37,7 +42,7 @@ class GoBuildStep(Step):
     Config:
     - packages: List[str] (default ['./...']) – what to build
     - flags: List[str] (optional) – extra flags (e.g., ['-v'])
-    - output: str (optional) – pass as '-o <output>'
+    - output: str (optional) – passes as '-o <output>'
     - cwd, env, timeout, retries – standard
     """
 
@@ -52,7 +57,7 @@ class GoBuildStep(Step):
             cmd += ["-o", output]
         cmd += packages
 
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__gobuild",
             config={
                 "cmd": cmd,
@@ -62,7 +67,12 @@ class GoBuildStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()
 
 
 class GoTestStep(Step):
@@ -86,7 +96,7 @@ class GoTestStep(Step):
             cmd += ["-json"]
         cmd += packages
 
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__gotest",
             config={
                 "cmd": cmd,
@@ -96,4 +106,9 @@ class GoTestStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()

@@ -48,7 +48,7 @@ class Pipeline:
                 issues.append({"kind": "validator_error", "name": type(v).__name__, "message": str(e)})
         return {"status": "ok" if not issues else "invalid_env", "issues": issues}
 
-    def execute(self, parallel: bool = False, artifacts: Optional[List["PathLike"]] = None) -> Dict[str, Any]:
+    def execute(self, parallel: bool = False, artifacts: Optional[List["PathLike"]] = None, show: bool = False) -> Dict[str, Any]:
         # Inject pipeline-level hook and data into steps if missing
         for r in self.runners:
             for s in getattr(r, "steps", []):
@@ -56,6 +56,11 @@ class Pipeline:
                     s.data = self.data
                 if self.hook is not None and getattr(s, "hook", None) is None:
                     s.hook = self.hook
+                # Propagate show flag to steps (used by CommandStep to dump output)
+                try:
+                    setattr(s, "show", bool(show))
+                except Exception:
+                    pass
         # Pre-run environment validation (aggregate issues, no fail-fast)
         if self.validators:
             env_report = self.validate_environment()

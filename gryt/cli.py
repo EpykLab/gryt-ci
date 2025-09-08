@@ -60,7 +60,7 @@ def _resolve_pipeline_script(arg: str, base: Path) -> Path:
     return (base / arg).resolve()
 
 
-def cmd_run(script: str, parallel: bool = False) -> int:
+def cmd_run(script: str, parallel: bool = False, show: bool = False) -> int:
     try:
         script_path = _resolve_pipeline_script(script, Path.cwd())
         mod = _load_module_from_path(script_path)
@@ -71,7 +71,7 @@ def cmd_run(script: str, parallel: bool = False) -> int:
                 err=True,
             )
             return 2
-        results = pipeline.execute(parallel=parallel)
+        results = pipeline.execute(parallel=parallel, show=show)
         typer.echo(json.dumps({"status": "ok", "results": results}, indent=2))
         return 0
     except Exception as e:  # noqa: BLE001
@@ -397,8 +397,9 @@ def init_command(
 def run_command(
     script: str = typer.Argument(..., help="Path to pipeline script or name inside .gryt/pipelines"),
     parallel: bool = typer.Option(False, "--parallel", help="Run runners in parallel"),
+    show: bool = typer.Option(False, "--show", help="Dump command output to stdout while running"),
 ):
-    code = cmd_run(script=script, parallel=parallel)
+    code = cmd_run(script=script, parallel=parallel, show=show)
     raise typer.Exit(code)
 
 

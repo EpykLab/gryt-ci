@@ -65,6 +65,8 @@ class PublishDestinationStep(Step):
                     "runner_id": None,
                     "name": self.id,
                     "output_json": output,
+                    "stdout": None,
+                    "stderr": None,
                     "status": status,
                     "duration": duration,
                 },

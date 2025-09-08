@@ -4,6 +4,7 @@ gryt/__init__.py
 gryt/cli.py
 gryt/data.py
 gryt/destination.py
+gryt/envvalidate.py
 gryt/hook.py
 gryt/pipeline.py
 gryt/publish.py

@@ -31,7 +31,7 @@ class NpmInstallStep(Step):
 
         cmd = ["npm", "ci"] if (use_ci and lock_exists) else ["npm", "install"]
 
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__npminstall",
             config={
                 "cmd": cmd,
@@ -41,7 +41,39 @@ class NpmInstallStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()
+
+class NpmBuildStep(Step):
+    """Run `<node package manager> run <script>` to build a Node project.
+
+    Config:
+        - package_manager: str (default npm)
+    """
+
+
+    def run(self) -> Dict[str, Any]:
+        cfg = self.config
+        script = cfg.get("script", "build")
+        package_manager = cfg.get("package_manager", "npm")
+        cmd = [package_manager, "run", script]
+        _cs = CommandStep(
+            id=f"{self.id}__npmbuild",
+            config={
+                "cmd": cmd,
+                "cwd": cfg.get("cwd"),
+                "env": cfg.get("env"),
+            }
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()
 
 
 class SvelteBuildStep(Step):
@@ -56,7 +88,7 @@ class SvelteBuildStep(Step):
         cfg = self.config
         script = cfg.get("script", "build")
         cmd = ["npm", "run", script]
-        return CommandStep(
+        _cs = CommandStep(
             id=f"{self.id}__sveltebuild",
             config={
                 "cmd": cmd,
@@ -66,4 +98,9 @@ class SvelteBuildStep(Step):
                 "retries": cfg.get("retries", 0),
             },
             data=self.data,
-        ).run()
+        )
+        try:
+            setattr(_cs, "show", bool(getattr(self, "show", False)))
+        except Exception:
+            pass
+        return _cs.run()
