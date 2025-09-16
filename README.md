@@ -11,8 +11,8 @@ This documentation helps you get started quickly and understand the core concept
 
 We recommend using pipx to install the pure-Python CLI:
 
-- pipx install gryt  # when published to PyPI
-- pipx install .     # from a local checkout
+- pipx install https://github.com/EpykLab/gryt-ci/archive/refs/tags/v0.2.2.zip
+- pipx install . # from a local checkout
 
 For development in this repository:
 - Ensure Python 3.8+ is installed.
