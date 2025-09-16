@@ -8,7 +8,7 @@ from gryt import PyPIDestination
 # - Credentials via TWINE_API_TOKEN or TWINE_USERNAME/TWINE_PASSWORD env.
 
 runner = Runner([
-    # For demonstration; replace with your actual build steps
+    # For demonstration; replace it with your actual build steps
     CommandStep('build_py', {'cmd': ['bash', '-lc', 'python -m pip install build && python -m build']})
 ])
 

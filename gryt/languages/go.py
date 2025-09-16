@@ -49,10 +49,11 @@ class GoBuildStep(Step):
     def run(self) -> Dict[str, Any]:
         cfg = self.config
         packages: List[str] = cfg.get("packages") or ["./..."]
+        go_envs: List[str] = cfg.get("go_envs") or []
         flags: List[str] = cfg.get("flags") or []
         output: Optional[str] = cfg.get("output")
 
-        cmd: List[str] = ["go", "build"] + flags
+        cmd: List[str] = go_envs + ["go", "build"] + flags
         if output:
             cmd += ["-o", output]
         cmd += packages

@@ -137,6 +137,43 @@ pypi_dest = PyPIDestination('pypi', {
 })
 ```
 
+### ContainerRegistryDestination
+Publishes arbitrary artifacts to any OCI-compliant container registry using the `oras` CLI (Docker Hub, GHCR, ECR, GCR, ACR, Harbor, etc.). Not limited to Docker registries or images.
+
+Config:
+- ref: str (required) – target OCI reference, e.g., ghcr.io/your-org/artifacts:v1
+- tool: str (default 'oras') – currently only 'oras' is supported
+- artifact_type: str (optional) – manifest artifact type, e.g., application/vnd.yourproj.bundle.v1+tar
+- extra_args: List[str]
+- env: dict (merged onto process env)
+- cwd, timeout
+
+Auth:
+- Use `oras login <registry>` prior to publish, or rely on your CI's credential helpers.
+- For AWS ECR, for example: `oras login -u AWS -p $(aws ecr get-login-password) <aws_account>.dkr.ecr.<region>.amazonaws.com`.
+
+Example:
+```python
+from pathlib import Path
+from gryt import Pipeline, Runner, CommandStep, LocalRuntime
+from gryt import ContainerRegistryDestination
+
+# Build step producing artifacts under ./dist
+runner = Runner([
+    CommandStep('build', {'cmd': ['bash', '-lc', 'mkdir -p dist && echo bin > dist/app-linux-amd64.tar.gz && echo bin > dist/app-darwin-arm64.tar.gz']})
+])
+
+oci_dest = ContainerRegistryDestination('oci_push', {
+    'ref': 'ghcr.io/your-org/my-artifacts:v1',
+    'artifact_type': 'application/vnd.yourproj.bundle.v1+tar',
+})
+
+PIPELINE = Pipeline([runner], runtime=LocalRuntime(), destinations=[oci_dest])
+artifacts = [Path('dist/app-linux-amd64.tar.gz'), Path('dist/app-darwin-arm64.tar.gz')]
+results = PIPELINE.execute(artifacts=artifacts)
+print(results)
+```
+
 ### GitHubReleaseDestination
 Creates or finds a GitHub Release by tag and uploads files as assets via the GitHub REST API (no extra deps).
 

@@ -10,7 +10,7 @@ class Runner:
     """Sequential runner for a list of steps.
 
     Config options:
-    - fail_fast: bool (default True) – stop on first error
+    - fail_fast: bool (default True) – stop on the first error
     """
 
     def __init__(self, steps: List[Step], data: Optional[Data] = None, config: Optional[Dict[str, Any]] = None) -> None:

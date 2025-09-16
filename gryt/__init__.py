@@ -21,7 +21,7 @@ from .pipeline import Pipeline
 from .runtime import Runtime, LocalRuntime
 from .versioning import Versioning, SimpleVersioning
 from .hook import Hook, PrintHook, HttpHook
-from .destination import Destination, CommandDestination, NpmRegistryDestination, PyPIDestination, GitHubReleaseDestination
+from .destination import Destination, CommandDestination, NpmRegistryDestination, PyPIDestination, GitHubReleaseDestination, ContainerRegistryDestination
 from .publish import PublishDestinationStep
 from .envvalidate import EnvValidator, EnvVarValidator, ToolValidator
 from .containers import ContainerBuildStep
@@ -58,6 +58,7 @@ __all__ = [
     "NpmRegistryDestination",
     "PyPIDestination",
     "GitHubReleaseDestination",
+    "ContainerRegistryDestination",
     "PublishDestinationStep",
     # Env validation
     "EnvValidator",

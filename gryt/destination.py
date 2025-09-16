@@ -200,6 +200,66 @@ class PyPIDestination(Destination):
             return [{"artifact": f, "status": "error", "error": str(e)} for f in files]
 
 
+class ContainerRegistryDestination(Destination):
+    """Push arbitrary artifacts to an OCI-compliant registry using the `oras` CLI.
+
+    This destination is registry-agnostic: it works with any OCI-compatible
+    registry (Docker Hub, GHCR, ECR, GCR, ACR, Harbor, etc.). It does not
+    require Docker to be installed.
+
+    Config:
+    - ref: str (required) – target OCI reference, e.g. 'ghcr.io/org/artifacts:v1'
+    - tool: str (default 'oras') – currently only 'oras' is supported
+    - artifact_type: str (optional) – sets the artifact type for the manifest, e.g.
+      'application/vnd.acme.thing.v1+json'
+    - extra_args: List[str] – additional flags to pass to the CLI
+    - env: dict – extra environment variables for the subprocess
+    - cwd: str – working directory
+    - timeout: float – seconds to wait for the command
+
+    Notes:
+    - Authentication is handled by the CLI (e.g., `oras login` or registry-specific
+      environment variables). This destination does not manage credentials.
+    - All provided artifacts are pushed under a single reference in one call,
+      which is the common ORAS usage pattern. Results are returned per artifact
+      with a uniform status.
+    """
+
+    def publish(self, artifacts: Sequence[PathLike]) -> List[Dict[str, Any]]:
+        cfg = self.config
+        ref = cfg.get("ref")
+        if not ref:
+            raise ValueError("ContainerRegistryDestination requires config['ref'] (OCI reference)")
+        tool = (cfg.get("tool") or "oras").lower()
+        if tool != "oras":
+            raise ValueError("ContainerRegistryDestination currently supports tool='oras' only")
+
+        artifact_type = cfg.get("artifact_type")
+        extra = list(cfg.get("extra_args") or [])
+        cwd = cfg.get("cwd")
+        timeout = cfg.get("timeout")
+        env = os.environ.copy()
+        env.update(cfg.get("env", {}))
+
+        paths = self._as_paths(artifacts)
+        if not paths:
+            return []
+
+        cmd: List[str] = ["oras", "push", str(ref)]
+        if artifact_type:
+            cmd += ["--artifact-type", artifact_type]
+        cmd += [str(p) for p in paths]
+        cmd += extra
+
+        try:
+            cp = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env, timeout=timeout, check=False)
+            status = "success" if cp.returncode == 0 else "error"
+            details = {"stdout": cp.stdout, "stderr": cp.stderr, "returncode": cp.returncode}
+            return [{"artifact": str(p), "status": status, "details": details} for p in paths]
+        except Exception as e:  # noqa: BLE001
+            return [{"artifact": str(p), "status": "error", "error": str(e)} for p in paths]
+
+
 class GitHubReleaseDestination(Destination):
     """Create or reuse a GitHub Release and upload assets.
 
@@ -283,7 +343,7 @@ class GitHubReleaseDestination(Destination):
         results: List[Dict[str, Any]] = []
         for p in self._as_paths(artifacts):
             name = p.name
-            # Optionally delete existing asset with same name
+            # Optionally delete existing asset with the same name
             if overwrite and name in existing:
                 asset_id = existing[name].get("id")
                 if asset_id:

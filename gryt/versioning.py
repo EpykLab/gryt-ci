@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import subprocess
 from abc import ABC, abstractmethod
-from typing import Optional
 
 
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -38,11 +37,24 @@ class SimpleVersioning(Versioning):
             pass
         return "0.0.0"
 
+    def get_last_commit_hash(self) -> str:
+        try:
+            out = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+            if out:
+                return out
+        except Exception:
+            pass
+        return "0" * 40
+
+    def tag_with_last_commit(self, message: str) -> None:
+        last_hash = self.get_last_commit_hash()
+        self.tag_release(last_hash, message)
+
     def bump_version(self, level: str = "patch") -> str:
         last = self._get_last_tag()
         m = SEMVER_RE.match(last)
         if not m:
-            # If last tag is non-semver, reset to 0.0.0
+            # If the last tag is non-semver, reset to 0.0.0
             major, minor, patch = 0, 0, 0
         else:
             major, minor, patch = map(int, m.groups())
