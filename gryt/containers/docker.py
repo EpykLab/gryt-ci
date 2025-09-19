@@ -149,6 +149,7 @@ class ContainerBuildStep(Step):
                     img_obj = client.images.get(image_id)
                     for t in tags_list[1:]:
                         # Split repo:tag
+                        t = t.lower()
                         if ":" in t:
                             repo, tag = t.rsplit(":", 1)
                         else:
