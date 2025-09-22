@@ -132,6 +132,7 @@ def cmd_init(path: Optional[Path], force: bool) -> int:
             """#!/usr/bin/env python3
 from gryt import Pipeline, Runner, CommandStep, SqliteData, LocalRuntime
 
+version = SimpleVersioning().get_last_commit_hash()
 data = SqliteData(db_path='.gryt/gryt.db')
 runtime = LocalRuntime()
 
@@ -324,6 +325,7 @@ from gryt import {import_str}
 # Use project-local database by default
 # Tip: if you prefer ephemeral runs during experimentation, use SqliteData(in_memory=True)
 
+version = SimpleVersioning().get_last_commit_hash()
 data = SqliteData(db_path='.gryt/gryt.db')
 runtime = LocalRuntime()
 {validators_block}runner = Runner([
