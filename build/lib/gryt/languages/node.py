@@ -11,7 +11,6 @@ class NpmInstallStep(Step):
     Config:
     - use_ci: bool (default True) – prefer `npm ci`
     - cwd, env, timeout, retries – standard
-    - use_pnpm: bool - use pnpm instead of npm
     """
 
     def run(self) -> Dict[str, Any]:
@@ -20,7 +19,6 @@ class NpmInstallStep(Step):
         cfg = self.config
         use_ci = bool(cfg.get("use_ci", True))
         cwd = cfg.get("cwd")
-        use_pnpm = cfg.get("use_pnpm")
         lock_exists = False
         if cwd:
             lock_exists = os.path.exists(os.path.join(cwd, "package-lock.json")) or os.path.exists(
@@ -31,10 +29,7 @@ class NpmInstallStep(Step):
                 os.path.exists(fname) for fname in ["package-lock.json", "pnpm-lock.yaml"]
             )
 
-        if use_pnpm:
-            cmd = ["pnpm", "ci"] if (use_ci and lock_exists) else ["pnpm", "install"]
-        else:
-            cmd = ["npm", "ci"] if (use_ci and lock_exists) else ["npm", "install"]
+        cmd = ["npm", "ci"] if (use_ci and lock_exists) else ["npm", "install"]
 
         _cs = CommandStep(
             id=f"{self.id}__npminstall",
