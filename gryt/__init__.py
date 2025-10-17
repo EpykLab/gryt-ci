@@ -35,6 +35,7 @@ from .steps import (
     SvelteBuildStep,
     CargoBuildStep,
     CargoTestStep,
+    ScytheValidator
 )
 
 __all__ = [
@@ -77,4 +78,6 @@ __all__ = [
     "SvelteBuildStep",
     "CargoBuildStep",
     "CargoTestStep",
+    # Validators
+    "ScytheValidator"
 ]
