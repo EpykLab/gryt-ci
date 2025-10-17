@@ -17,7 +17,14 @@ from .languages import (
     CargoTestStep,
 )
 
+from .validators import (
+    ScytheValidator,
+
+)
+
+
 __all__ = [
+    # language-specific steps
     "GoModDownloadStep",
     "GoBuildStep",
     "GoTestStep",
@@ -28,5 +35,7 @@ __all__ = [
     "SvelteBuildStep",
     "CargoBuildStep",
     "CargoTestStep",
-]
 
+    # validation-specific steps
+    "ScytheValidator",
+]
