@@ -23,7 +23,7 @@ class ScytheValidator(Step):
         gate: bool = cfg.get("gate", True)
         scythe_args: List[str] = cfg.get("scythe_args", [""])
 
-        cmd: List[str] = ["scythe", "run"] + (["--gate-version"] if gate else []) + [path] + scythe_args
+        cmd: List[str] = ["scythe", "run"] + [path] + scythe_args + (["--gate-version"] if gate else [])
 
         if mode == Modes.path:
             path = str(path)
