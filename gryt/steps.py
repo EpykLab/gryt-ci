@@ -19,7 +19,6 @@ from .languages import (
 
 from .validators import (
     ScytheValidator,
-
 )
 
 
