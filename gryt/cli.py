@@ -12,6 +12,7 @@ import shutil
 import typer
 
 from . import Pipeline, Runner, CommandStep, SqliteData, LocalRuntime
+from .cloud import cloud_app
 
 
 GRYT_DIRNAME = ".gryt"
@@ -20,6 +21,9 @@ PIPELINES_SUBDIR = "pipelines"
 CONFIG_FILENAME = "config"
 
 app = typer.Typer(name="gryt", help="Gryt CLI: run and manage gryt pipelines.", no_args_is_help=True)
+
+# Register cloud subcommand
+app.add_typer(cloud_app, name="cloud")
 
 
 def _load_module_from_path(path: Path) -> ModuleType:
