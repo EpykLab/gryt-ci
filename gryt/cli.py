@@ -509,7 +509,8 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as e:
         return int(e.code or 0)
     except Exception as e:  # Fallback safety
-        typer.echo(f"Unexpected error: {e}", err=True)
+        if str(e):  # Only print if there's an actual error message
+            typer.echo(f"Unexpected error: {e}", err=True)
         return 1
 
 
