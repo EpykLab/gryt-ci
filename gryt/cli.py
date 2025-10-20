@@ -505,7 +505,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except typer.Exit as e:
         # typer.Exit inherits from click.exceptions.Exit and carries a code
-        return int(e.code or 0)
+        return int(e.exit_code or 0)
     except SystemExit as e:
         return int(e.code or 0)
     except Exception as e:  # Fallback safety

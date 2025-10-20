@@ -1,22 +1,55 @@
 """Client for Gryt Cloud API."""
 from __future__ import annotations
-
+import hashlib
+import hmac
+from datetime import datetime, timezone
 from typing import Any, Optional
 import requests
-from requests.auth import HTTPBasicAuth
+from requests.auth import AuthBase, HTTPBasicAuth
+
+
+class HmacAuth(AuthBase):
+    """HMAC authentication for requests."""
+
+    def __init__(self, key_id: str, secret: str):
+        self.key_id = key_id
+        self.secret = secret
+
+    def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
+        method = r.method.upper()
+        path = r.path_url
+        timestamp = datetime.now(timezone.utc).isoformat()
+        body = r.body.decode('utf-8', 'ignore') if r.body else ""
+
+        message = f"{method}\n{path}\n{timestamp}\n{body}"
+        signature = hmac.new(self.secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+
+        r.headers["Authorization"] = f"HMAC {self.key_id}:{timestamp}:{signature}"
+        return r
 
 
 class GrytCloudClient:
     """Client for interacting with Gryt Cloud API."""
 
-    def __init__(self, base_url: str = "https://gryt-ci-api.fly.dev", username: Optional[str] = None, password: Optional[str] = None):
+    def __init__(
+        self,
+        base_url: str = "https://gryt-ci-api.fly.dev",
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        api_key_secret: Optional[str] = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
+        self.api_key_id = api_key_id
+        self.api_key_secret = api_key_secret
         self.session = requests.Session()
 
-    def _get_auth(self) -> Optional[HTTPBasicAuth]:
-        """Get basic auth if credentials are available."""
+    def _get_auth(self) -> Optional[AuthBase]:
+        """Get an auth handler for the request."""
+        if self.api_key_id and self.api_key_secret:
+            return HmacAuth(self.api_key_id, self.api_key_secret)
         if self.username and self.password:
             return HTTPBasicAuth(self.username, self.password)
         return None
@@ -163,3 +196,24 @@ class GrytCloudClient:
             f"/api/v1/webhooks/run/{webhook_key}",
             require_auth=False,
         )
+
+    # API Keys
+    def create_api_key(self, name: str, expires_in_days: Optional[int] = None) -> dict[str, Any]:
+        """Create a new API key."""
+        payload = {"name": name}
+        if expires_in_days:
+            payload["expires_in_days"] = expires_in_days
+        return self._request("POST", "/api/v1/api-keys", json=payload)
+
+    def list_api_keys(self) -> dict[str, Any]:
+        """List all API keys."""
+        return self._request("GET", "/api/v1/api-keys")
+
+    def revoke_api_key(self, key_id: str) -> dict[str, Any]:
+        """Revoke an API key."""
+        return self._request("DELETE", f"/api/v1/api-keys/{key_id}")
+
+    # Apply
+    def apply(self, yaml_content: str) -> dict[str, Any]:
+        """Apply a YAML configuration."""
+        return self._request("POST", "/api/v1/apply", json={"yaml_content": yaml_content})

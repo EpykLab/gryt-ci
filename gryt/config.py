@@ -55,6 +55,18 @@ class Config:
         """Get configured password."""
         return self._data.get("password")
 
+    @property
+    def api_key_id(self) -> Optional[str]:
+        """Get configured API key ID."""
+        return self._data.get("api_key_id")
+
+    @property
+    def api_key_secret(self) -> Optional[str]:
+        """Get configured API key secret."""
+        return self._data.get("api_key_secret")
+
     def has_credentials(self) -> bool:
         """Check if credentials are configured."""
-        return bool(self.username and self.password)
+        has_basic = bool(self.username and self.password)
+        has_api_key = bool(self.api_key_id and self.api_key_secret)
+        return has_basic or has_api_key

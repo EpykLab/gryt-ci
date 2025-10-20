@@ -18,7 +18,12 @@ def _get_client() -> GrytCloudClient:
     if not config.has_credentials():
         typer.echo("Error: Not logged in. Run 'gryt cloud login' first.", err=True)
         raise typer.Exit(1)
-    return GrytCloudClient(username=config.username, password=config.password)
+    return GrytCloudClient(
+        username=config.username,
+        password=config.password,
+        api_key_id=config.api_key_id,
+        api_key_secret=config.api_key_secret,
+    )
 
 
 # Authentication Commands
@@ -26,15 +31,30 @@ def _get_client() -> GrytCloudClient:
 
 @cloud_app.command("login", help="Configure cloud credentials")
 def login(
-    username: str = typer.Option(..., "--username", "-u", prompt=True, help="Your username"),
-    password: str = typer.Option(..., "--password", "-p", prompt=True, hide_input=True, help="Your password"),
+    method: str = typer.Option("credentials", "--method", "-m", help="Authentication method (credentials or api-key)"),
 ):
     """Log in to Gryt Cloud by saving credentials."""
     config = Config()
-    config.set("username", username)
-    config.set("password", password)
+    if method == "api-key":
+        api_key_id = typer.prompt("API key ID")
+        api_key_secret = typer.prompt("API key secret", hide_input=True)
+        config.set("api_key_id", api_key_id)
+        config.set("api_key_secret", api_key_secret)
+        config.set("username", None)
+        config.set("password", None)
+        typer.echo(f"✓ Logged in with API key {api_key_id}")
+    elif method == "credentials":
+        username = typer.prompt("Username")
+        password = typer.prompt("Password", hide_input=True)
+        config.set("username", username)
+        config.set("password", password)
+        config.set("api_key_id", None)
+        config.set("api_key_secret", None)
+        typer.echo(f"✓ Logged in as {username}")
+    else:
+        typer.echo("Error: Invalid authentication method. Please choose either 'credentials' or 'api-key'.", err=True)
+        raise typer.Exit(1)
     config.save()
-    typer.echo(f"✓ Logged in as {username}")
 
 
 @cloud_app.command("signup", help="Create a new Gryt Cloud account")
@@ -64,6 +84,8 @@ def logout():
     config = Config()
     config.set("username", None)
     config.set("password", None)
+    config.set("api_key_id", None)
+    config.set("api_key_secret", None)
     config.save()
     typer.echo("✓ Logged out")
 
@@ -72,10 +94,78 @@ def logout():
 def whoami():
     """Display the currently logged-in user."""
     config = Config()
-    if config.has_credentials():
+    if config.api_key_id:
+        typer.echo(f"Logged in with API key: {config.api_key_id}")
+    elif config.username:
         typer.echo(f"Logged in as: {config.username}")
     else:
         typer.echo("Not logged in")
+        raise typer.Exit(1)
+
+
+# API Key Commands
+
+
+api_key_app = typer.Typer(name="api-keys", help="Manage API keys", no_args_is_help=True)
+cloud_app.add_typer(api_key_app)
+
+
+@api_key_app.command("create", help="Create a new API key")
+def create_api_key(
+    name: str = typer.Option(..., "--name", "-n", help="API key name"),
+    expires_in_days: Optional[int] = typer.Option(None, "--expires-in-days", "-d", help="Expiration in days"),
+):
+    """Create a new API key."""
+    client = _get_client()
+    try:
+        result = client.create_api_key(name=name, expires_in_days=expires_in_days)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@api_key_app.command("list", help="List all API keys")
+def list_api_keys():
+    """List all API keys."""
+    client = _get_client()
+    try:
+        result = client.list_api_keys()
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@api_key_app.command("revoke", help="Revoke an API key")
+def revoke_api_key(
+    key_id: str = typer.Argument(..., help="API key ID to revoke"),
+):
+    """Revoke an API key."""
+    client = _get_client()
+    try:
+        result = client.revoke_api_key(key_id=key_id)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+# Apply Command
+
+
+@cloud_app.command("apply", help="Apply a declarative YAML configuration")
+def apply(
+    yaml_file: typer.FileText = typer.Argument(..., help="Path to the YAML configuration file"),
+):
+    """Apply a declarative YAML configuration (kubectl-style)."""
+    client = _get_client()
+    try:
+        yaml_content = yaml_file.read()
+        result = client.apply(yaml_content=yaml_content)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 
 
