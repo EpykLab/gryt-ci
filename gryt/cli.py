@@ -18,6 +18,7 @@ from .cloud import cloud_app
 GRYT_DIRNAME = ".gryt"
 DEFAULT_DB_RELATIVE = "gryt.db"
 PIPELINES_SUBDIR = "pipelines"
+MANIFESTS_SUBDIR = "manifests"
 CONFIG_FILENAME = "config"
 
 app = typer.Typer(name="gryt", help="Gryt CLI: run and manage gryt pipelines.", no_args_is_help=True)
@@ -104,6 +105,7 @@ def _ensure_gryt_structure(root: Path, force: bool = False) -> Path:
         shutil.rmtree(gryt_dir)
     # Create directories
     (gryt_dir / PIPELINES_SUBDIR).mkdir(parents=True, exist_ok=True)
+    (gryt_dir / MANIFESTS_SUBDIR).mkdir(parents=True, exist_ok=True)
     # Create config file if missing
     cfg = gryt_dir / CONFIG_FILENAME
     if not cfg.exists():
