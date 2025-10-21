@@ -33,7 +33,7 @@ class GrytCloudClient:
 
     def __init__(
         self,
-        base_url: str = "https://gryt-ci-api.fly.dev",
+        base_url: str = "https://api.gryt.dev",
         username: Optional[str] = None,
         password: Optional[str] = None,
         api_key_id: Optional[str] = None,
