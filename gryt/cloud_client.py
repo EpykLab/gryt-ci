@@ -119,6 +119,10 @@ class GrytCloudClient:
         """Get a specific pipeline."""
         return self._request("GET", f"/api/v1/pipelines/{pipeline_id}")
 
+    def delete_pipeline(self, pipeline_id: str) -> dict[str, Any]:
+        """Delete a specific pipeline."""
+        return self._request("DELETE", f"/api/v1/pipelines/{pipeline_id}")
+
     # GitHub Repositories
     def list_github_repos(self) -> dict[str, Any]:
         """List GitHub repository configurations."""
@@ -146,6 +150,10 @@ class GrytCloudClient:
     def get_github_repo(self, repo_id: str) -> dict[str, Any]:
         """Get a specific GitHub repository configuration."""
         return self._request("GET", f"/api/v1/github-repos/{repo_id}")
+
+    def delete_github_repo(self, repo_id: str) -> dict[str, Any]:
+        """Delete a specific GitHub repository configuration."""
+        return self._request("DELETE", f"/api/v1/github-repos/{repo_id}")
 
     # Jobs
     def list_jobs(self) -> dict[str, Any]:
@@ -176,6 +184,10 @@ class GrytCloudClient:
         """Get a specific job."""
         return self._request("GET", f"/api/v1/jobs/{job_id}")
 
+    def delete_job(self, job_id: str) -> dict[str, Any]:
+        """Delete a specific job."""
+        return self._request("DELETE", f"/api/v1/jobs/{job_id}")
+
     # Webhooks
     def list_webhooks(self) -> dict[str, Any]:
         """List user's webhooks."""
@@ -188,6 +200,14 @@ class GrytCloudClient:
             "/api/v1/webhooks",
             json={"name": name, "description": description, "job_id": job_id},
         )
+
+    def get_webhook(self, webhook_id: str) -> dict[str, Any]:
+        """Get a specific webhook."""
+        return self._request("GET", f"/api/v1/webhooks/{webhook_id}")
+
+    def delete_webhook(self, webhook_id: str) -> dict[str, Any]:
+        """Delete a specific webhook."""
+        return self._request("DELETE", f"/api/v1/webhooks/{webhook_id}")
 
     def trigger_webhook(self, webhook_key: str) -> dict[str, Any]:
         """Trigger a webhook (public endpoint)."""

@@ -219,6 +219,20 @@ def get_pipeline(
         raise typer.Exit(1)
 
 
+@pipeline_app.command("delete", help="Delete a pipeline by ID")
+def delete_pipeline(
+    pipeline_id: str = typer.Argument(..., help="Pipeline ID"),
+):
+    """Delete a specific pipeline."""
+    client = _get_client()
+    try:
+        result = client.delete_pipeline(pipeline_id=pipeline_id)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
 # GitHub Repo Commands
 
 
@@ -270,6 +284,20 @@ def get_repo(
     client = _get_client()
     try:
         result = client.get_github_repo(repo_id=repo_id)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@repo_app.command("delete", help="Delete a repository by ID")
+def delete_repo(
+    repo_id: str = typer.Argument(..., help="Repository ID"),
+):
+    """Delete a specific GitHub repository configuration."""
+    client = _get_client()
+    try:
+        result = client.delete_github_repo(repo_id=repo_id)
         typer.echo(json.dumps(result, indent=2))
     except RuntimeError as e:
         typer.echo(f"Error: {e}", err=True)
@@ -333,6 +361,20 @@ def get_job(
         raise typer.Exit(1)
 
 
+@job_app.command("delete", help="Delete a job by ID")
+def delete_job(
+    job_id: str = typer.Argument(..., help="Job ID"),
+):
+    """Delete a specific job."""
+    client = _get_client()
+    try:
+        result = client.delete_job(job_id=job_id)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
 # Webhook Commands
 
 
@@ -362,6 +404,34 @@ def create_webhook(
     client = _get_client()
     try:
         result = client.create_webhook(name=name, description=description, job_id=job_id)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@webhook_app.command("get", help="Get a webhook by ID")
+def get_webhook(
+    webhook_id: str = typer.Argument(..., help="Webhook ID"),
+):
+    """Get a specific webhook."""
+    client = _get_client()
+    try:
+        result = client.get_webhook(webhook_id=webhook_id)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@webhook_app.command("delete", help="Delete a webhook by ID")
+def delete_webhook(
+    webhook_id: str = typer.Argument(..., help="Webhook ID"),
+):
+    """Delete a specific webhook."""
+    client = _get_client()
+    try:
+        result = client.delete_webhook(webhook_id=webhook_id)
         typer.echo(json.dumps(result, indent=2))
     except RuntimeError as e:
         typer.echo(f"Error: {e}", err=True)
