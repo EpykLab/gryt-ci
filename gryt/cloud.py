@@ -21,6 +21,7 @@ def _get_client() -> GrytCloudClient:
     return GrytCloudClient(
         username=config.username,
         password=config.password,
+        gryt_url=config.gryt_url,
         api_key_id=config.api_key_id,
         api_key_secret=config.api_key_secret,
     )

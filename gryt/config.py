@@ -65,6 +65,11 @@ class Config:
         """Get configured API key secret."""
         return self._data.get("api_key_secret")
 
+    @property
+    def gryt_url(self) -> Optional[str]:
+        """Get configured Gryt URL."""
+        return self._data.get("gryt_url")
+
     def has_credentials(self) -> bool:
         """Check if credentials are configured."""
         has_basic = bool(self.username and self.password)

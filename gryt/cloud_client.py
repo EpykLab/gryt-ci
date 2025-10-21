@@ -33,15 +33,15 @@ class GrytCloudClient:
 
     def __init__(
         self,
-        base_url: str = "https://api.gryt.dev",
         username: Optional[str] = None,
         password: Optional[str] = None,
+        gryt_url: Optional[str] = None,
         api_key_id: Optional[str] = None,
         api_key_secret: Optional[str] = None,
     ):
-        self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
+        self.gryt_url = gryt_url.rstrip("/") if gryt_url else "https://api.gryt.dev"
         self.api_key_id = api_key_id
         self.api_key_secret = api_key_secret
         self.session = requests.Session()
@@ -63,7 +63,7 @@ class GrytCloudClient:
         require_auth: bool = True,
     ) -> dict[str, Any]:
         """Make a request to the API."""
-        url = f"{self.base_url}{path}"
+        url = f"{self.gryt_url}{path}"
         auth = self._get_auth() if require_auth else None
 
         if require_auth and not auth:
