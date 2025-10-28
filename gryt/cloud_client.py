@@ -76,7 +76,7 @@ class GrytCloudClient:
                 json=json,
                 params=params,
                 auth=auth,
-                timeout=30,
+                timeout=60,
             )
             response.raise_for_status()
             return response.json()
