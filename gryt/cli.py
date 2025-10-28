@@ -77,8 +77,33 @@ def cmd_run(script: str, parallel: bool = False, show: bool = False) -> int:
             )
             return 2
         results = pipeline.execute(parallel=parallel, show=show)
-        typer.echo(json.dumps({"status": "ok", "results": results}, indent=2))
-        return 0
+        
+        # Check for failures in results and propagate non-zero exit codes
+        exit_code = 0
+        
+        # Check environment validation failures
+        if results.get("status") == "invalid_env":
+            exit_code = 1
+        else:
+            # Check runner results for failures
+            runners = results.get("runners", results)  # Handle both formats
+            for runner_result in runners.values():
+                steps = runner_result.get("steps", {})
+                for step_result in steps.values():
+                    # Check if step has error status or non-zero returncode
+                    if step_result.get("status") == "error":
+                        # Prefer the actual returncode if available, otherwise use 1
+                        step_rc = step_result.get("returncode")
+                        if step_rc is not None and step_rc != 0:
+                            exit_code = step_rc
+                        else:
+                            exit_code = 1
+                        break  # Exit early on first failure
+                if exit_code != 0:
+                    break
+        
+        typer.echo(json.dumps({"status": "ok" if exit_code == 0 else "error", "results": results}, indent=2))
+        return exit_code
     except Exception as e:  # noqa: BLE001
         typer.echo(f"Error: {e}", err=True)
         return 2
