@@ -222,6 +222,27 @@ class SqliteData(Data):
                 )
                 """
             )
+            # evolutions (v0.3.0)
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS evolutions (
+                    evolution_id TEXT PRIMARY KEY,
+                    generation_id TEXT NOT NULL,
+                    change_id TEXT NOT NULL,
+                    tag TEXT UNIQUE NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    pipeline_run_id TEXT,
+                    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    completed_at DATETIME,
+                    sync_status TEXT DEFAULT 'not_synced',
+                    remote_id TEXT,
+                    last_synced_at DATETIME,
+                    FOREIGN KEY (generation_id) REFERENCES generations(generation_id) ON DELETE CASCADE,
+                    FOREIGN KEY (change_id) REFERENCES generation_changes(change_id) ON DELETE CASCADE,
+                    FOREIGN KEY (pipeline_run_id) REFERENCES pipelines(pipeline_id) ON DELETE SET NULL
+                )
+                """
+            )
             self.conn.commit()
 
     def _jsonify(self, value: Any) -> Any:

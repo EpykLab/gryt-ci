@@ -254,6 +254,28 @@ class GrytCloudClient:
         """Delete a generation."""
         return self._request("DELETE", f"/api/v1/generations/{generation_id}")
 
+    # Evolutions (v0.3.0)
+    def create_evolution(self, evolution_data: dict[str, Any]) -> dict[str, Any]:
+        """Create a new evolution."""
+        return self._request("POST", "/api/v1/evolutions", json=evolution_data)
+
+    def list_evolutions(self, generation_id: Optional[str] = None) -> dict[str, Any]:
+        """List all evolutions (optionally filtered by generation)."""
+        params = {"generation_id": generation_id} if generation_id else None
+        return self._request("GET", "/api/v1/evolutions", params=params)
+
+    def get_evolution(self, evolution_id: str) -> dict[str, Any]:
+        """Get a specific evolution."""
+        return self._request("GET", f"/api/v1/evolutions/{evolution_id}")
+
+    def update_evolution(self, evolution_id: str, evolution_data: dict[str, Any]) -> dict[str, Any]:
+        """Update an evolution."""
+        return self._request("PATCH", f"/api/v1/evolutions/{evolution_id}", json=evolution_data)
+
+    def delete_evolution(self, evolution_id: str) -> dict[str, Any]:
+        """Delete an evolution."""
+        return self._request("DELETE", f"/api/v1/evolutions/{evolution_id}")
+
     # Apply
     def apply(self, yaml_content: str) -> dict[str, Any]:
         """Apply a YAML configuration."""

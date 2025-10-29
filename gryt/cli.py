@@ -14,6 +14,7 @@ import typer
 from . import Pipeline, Runner, CommandStep, SqliteData, LocalRuntime
 from .cloud import cloud_app
 from .generation_cli import generation_app
+from .evolution_cli import evolution_app
 from .config import Config
 
 
@@ -28,6 +29,7 @@ app = typer.Typer(name="gryt", help="Gryt CLI: run and manage gryt pipelines.", 
 # Register subcommands
 app.add_typer(cloud_app, name="cloud")
 app.add_typer(generation_app, name="generation")
+app.add_typer(evolution_app, name="evolution")
 
 
 def _load_module_from_path(path: Path) -> ModuleType:

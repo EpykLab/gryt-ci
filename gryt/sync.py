@@ -47,6 +47,11 @@ class CloudSyncHandler:
         event_bus.subscribe("generation.updated", self._on_generation_updated)
         event_bus.subscribe("generation.promoted", self._on_generation_promoted)
 
+        # Subscribe to evolution events (v0.3.0)
+        event_bus.subscribe("evolution.created", self._on_evolution_created)
+        event_bus.subscribe("evolution.completed", self._on_evolution_completed)
+        event_bus.subscribe("evolution.failed", self._on_evolution_failed)
+
         self._subscribed = True
         logger.debug(f"CloudSyncHandler attached (mode: {self.execution_mode})")
 
@@ -60,6 +65,9 @@ class CloudSyncHandler:
         event_bus.unsubscribe("generation.created", self._on_generation_created)
         event_bus.unsubscribe("generation.updated", self._on_generation_updated)
         event_bus.unsubscribe("generation.promoted", self._on_generation_promoted)
+        event_bus.unsubscribe("evolution.created", self._on_evolution_created)
+        event_bus.unsubscribe("evolution.completed", self._on_evolution_completed)
+        event_bus.unsubscribe("evolution.failed", self._on_evolution_failed)
 
         self._subscribed = False
         logger.debug("CloudSyncHandler detached")
@@ -78,6 +86,21 @@ class CloudSyncHandler:
         """Handle generation.promoted event"""
         if self.execution_mode in ("cloud", "hybrid"):
             self._sync_generation(event.payload["generation"])
+
+    def _on_evolution_created(self, event: Event) -> None:
+        """Handle evolution.created event"""
+        if self.execution_mode == "cloud":
+            self._sync_evolution(event.payload["evolution"])
+
+    def _on_evolution_completed(self, event: Event) -> None:
+        """Handle evolution.completed event"""
+        if self.execution_mode in ("cloud", "hybrid"):
+            self._sync_evolution(event.payload["evolution"])
+
+    def _on_evolution_failed(self, event: Event) -> None:
+        """Handle evolution.failed event"""
+        if self.execution_mode in ("cloud", "hybrid"):
+            self._sync_evolution(event.payload["evolution"])
 
     def _sync_generation(self, generation_data: dict) -> None:
         """Sync a generation to cloud"""
@@ -102,6 +125,31 @@ class CloudSyncHandler:
 
         except Exception as e:
             logger.error(f"Failed to sync generation: {e}")
+            # TODO: Update sync_status to 'failed' in local DB
+
+    def _sync_evolution(self, evolution_data: dict) -> None:
+        """Sync an evolution to cloud"""
+        if not self.client:
+            logger.debug("No cloud client configured, skipping sync")
+            return
+
+        try:
+            evolution_id = evolution_data["evolution_id"]
+            remote_id = evolution_data.get("remote_id")
+
+            if remote_id:
+                # Update existing
+                logger.info(f"Syncing evolution {evolution_data['tag']} (update)")
+                self.client.update_evolution(remote_id, evolution_data)
+            else:
+                # Create new
+                logger.info(f"Syncing evolution {evolution_data['tag']} (create)")
+                result = self.client.create_evolution(evolution_data)
+                # TODO: Update local DB with remote_id from result
+                logger.debug(f"Created evolution in cloud: {result}")
+
+        except Exception as e:
+            logger.error(f"Failed to sync evolution: {e}")
             # TODO: Update sync_status to 'failed' in local DB
 
 
