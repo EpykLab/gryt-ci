@@ -1,7 +1,7 @@
 # **gryt-ci** – *Composable, Contract-Driven CI for Secure Evolvability*
 
 > **Move fast — and stay in control.**
-> gryt-ci is a **local-first, platform-agnostic CI framework** that turns raw AI velocity into **governed, auditable, and resilient releases**.
+> gryt-ci is a **local-first, platform-agnostic CI framework** that turns raw velocity into **governed, auditable, and resilient releases**.
 > Built on **atomic contracts** (Generations) and **iterative proof** (Evolutions), gryt-ci ensures **nothing ships until the declared intent is 100% realized** — while preserving maximum execution speed.
 
 ---
