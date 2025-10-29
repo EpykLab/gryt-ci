@@ -233,6 +233,27 @@ class GrytCloudClient:
         """Revoke an API key."""
         return self._request("DELETE", f"/api/v1/api-keys/{key_id}")
 
+    # Generations (v0.2.0)
+    def create_generation(self, generation_data: dict[str, Any]) -> dict[str, Any]:
+        """Create a new generation."""
+        return self._request("POST", "/api/v1/generations", json=generation_data)
+
+    def list_generations(self) -> dict[str, Any]:
+        """List all generations."""
+        return self._request("GET", "/api/v1/generations")
+
+    def get_generation(self, generation_id: str) -> dict[str, Any]:
+        """Get a specific generation."""
+        return self._request("GET", f"/api/v1/generations/{generation_id}")
+
+    def update_generation(self, generation_id: str, generation_data: dict[str, Any]) -> dict[str, Any]:
+        """Update a generation."""
+        return self._request("PATCH", f"/api/v1/generations/{generation_id}", json=generation_data)
+
+    def delete_generation(self, generation_id: str) -> dict[str, Any]:
+        """Delete a generation."""
+        return self._request("DELETE", f"/api/v1/generations/{generation_id}")
+
     # Apply
     def apply(self, yaml_content: str) -> dict[str, Any]:
         """Apply a YAML configuration."""

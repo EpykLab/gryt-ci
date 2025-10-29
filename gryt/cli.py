@@ -13,6 +13,8 @@ import typer
 
 from . import Pipeline, Runner, CommandStep, SqliteData, LocalRuntime
 from .cloud import cloud_app
+from .generation_cli import generation_app
+from .config import Config
 
 
 GRYT_DIRNAME = ".gryt"
@@ -23,8 +25,9 @@ CONFIG_FILENAME = "config"
 
 app = typer.Typer(name="gryt", help="Gryt CLI: run and manage gryt pipelines.", no_args_is_help=True)
 
-# Register cloud subcommand
+# Register subcommands
 app.add_typer(cloud_app, name="cloud")
+app.add_typer(generation_app, name="generation")
 
 
 def _load_module_from_path(path: Path) -> ModuleType:
@@ -521,6 +524,64 @@ def migrate_command(
     db: Optional[Path] = typer.Option(None, "--db", help="Path to sqlite db (default ./.gryt/gryt.db)"),
 ):
     code = cmd_migrate(db=db)
+    raise typer.Exit(code)
+
+
+def cmd_config_set(key: str, value: str) -> int:
+    """Set a configuration value"""
+    try:
+        config = Config()
+
+        # Validate execution_mode
+        if key == "execution_mode":
+            if value not in ("local", "cloud", "hybrid"):
+                typer.echo(f"Error: Invalid execution_mode '{value}'. Must be: local, cloud, or hybrid", err=True)
+                return 2
+
+        config.set(key, value)
+        config.save()
+        typer.echo(f"✓ Set {key} = {value}")
+        return 0
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        return 2
+
+
+def cmd_config_get(key: Optional[str]) -> int:
+    """Get configuration value(s)"""
+    try:
+        config = Config()
+        if key:
+            value = config.get(key)
+            if value is None:
+                typer.echo(f"{key} = (not set)")
+            else:
+                typer.echo(f"{key} = {value}")
+        else:
+            # Show all config
+            typer.echo("Configuration:")
+            typer.echo(f"  execution_mode: {config.execution_mode}")
+            if config.username:
+                typer.echo(f"  username: {config.username}")
+            if config.api_key_id:
+                typer.echo(f"  api_key_id: {config.api_key_id}")
+            if config.gryt_url:
+                typer.echo(f"  gryt_url: {config.gryt_url}")
+        return 0
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        return 2
+
+
+@app.command("config", help="Get or set configuration values")
+def config_command(
+    key: Optional[str] = typer.Argument(None, help="Configuration key"),
+    value: Optional[str] = typer.Argument(None, help="Value to set (omit to get current value)"),
+):
+    if value:
+        code = cmd_config_set(key, value)
+    else:
+        code = cmd_config_get(key)
     raise typer.Exit(code)
 
 

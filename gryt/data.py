@@ -190,6 +190,38 @@ class SqliteData(Data):
                 )
                 """
             )
+            # generations (v0.2.0)
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS generations (
+                    generation_id TEXT PRIMARY KEY,
+                    version TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    status TEXT DEFAULT 'draft',
+                    pipeline_template TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    promoted_at DATETIME,
+                    sync_status TEXT DEFAULT 'not_synced',
+                    remote_id TEXT,
+                    last_synced_at DATETIME
+                )
+                """
+            )
+            # generation_changes (v0.2.0)
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS generation_changes (
+                    change_id TEXT PRIMARY KEY,
+                    generation_id TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    status TEXT DEFAULT 'pending',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (generation_id) REFERENCES generations(generation_id) ON DELETE CASCADE
+                )
+                """
+            )
             self.conn.commit()
 
     def _jsonify(self, value: Any) -> Any:

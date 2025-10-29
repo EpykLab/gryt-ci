@@ -70,6 +70,11 @@ class Config:
         """Get configured Gryt URL."""
         return self._data.get("gryt_url")
 
+    @property
+    def execution_mode(self) -> str:
+        """Get execution mode (local, cloud, hybrid)."""
+        return self._data.get("execution_mode", "hybrid")
+
     def has_credentials(self) -> bool:
         """Check if credentials are configured."""
         has_basic = bool(self.username and self.password)

@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["version", "changes"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^v?\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (e.g., v2.2.0 or 2.2.0)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this generation"
+    },
+    "changes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["type", "id", "title"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["fix", "refine", "add", "remove"],
+            "description": "Change type: fix (bug), refine (enhancement), add (feature), remove (deletion)"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z]+-[0-9]+$",
+            "description": "Change ID (e.g., PAY-001, FEAT-123)"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short title describing the change"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional detailed description"
+          }
+        }
+      }
+    },
+    "pipeline_template": {
+      "type": "string",
+      "description": "Pipeline template to use for evolutions (e.g., release-pipeline, go.release)"
+    }
+  }
+}
