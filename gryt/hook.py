@@ -33,6 +33,19 @@ class Hook(ABC):
     def on_error(self, scope: str, error: Exception, context: Optional[Dict[str, Any]] = None) -> None:  # noqa: D401
         self._safe_noop()
 
+    # v0.5.0: Change-type hooks
+    def on_change_type_add(self, change: Any, context: Optional[Dict[str, Any]] = None) -> None:  # noqa: D401
+        self._safe_noop()
+
+    def on_change_type_fix(self, change: Any, context: Optional[Dict[str, Any]] = None) -> None:  # noqa: D401
+        self._safe_noop()
+
+    def on_change_type_refine(self, change: Any, context: Optional[Dict[str, Any]] = None) -> None:  # noqa: D401
+        self._safe_noop()
+
+    def on_change_type_remove(self, change: Any, context: Optional[Dict[str, Any]] = None) -> None:  # noqa: D401
+        self._safe_noop()
+
     # Helpers
     def _safe_noop(self) -> None:
         return None
@@ -126,3 +139,86 @@ class HttpHook(Hook):
         except Exception:
             # Swallow errors to keep pipeline resilient
             return None
+
+
+class PolicyHook(Hook):
+    """
+    Hook that validates policies before evolution start (v0.5.0).
+
+    Raises PolicyViolation if any policy fails.
+    """
+
+    def __init__(self, policy_set: "PolicySet"):
+        from .policy import PolicySet
+        self.policy_set = policy_set
+
+    def validate_for_evolution(
+        self,
+        change_type: str,
+        change_id: str,
+        generation_id: str,
+        data: "SqliteData",
+        pipeline_steps: Optional[list[str]] = None
+    ) -> None:
+        """
+        Validate policies for an evolution.
+
+        Raises PolicyViolation if validation fails.
+        """
+        from .policy import PolicyViolation
+
+        violations = self.policy_set.validate_all(
+            change_type, change_id, generation_id, data, pipeline_steps
+        )
+
+        if violations:
+            # Raise the first violation
+            raise violations[0]
+
+
+class ChangeTypeHook(Hook):
+    """
+    Hook that triggers change-type-specific callbacks (v0.5.0).
+
+    Allows custom logic per change type (add, fix, refine, remove).
+    """
+
+    def __init__(
+        self,
+        on_add: Optional[callable] = None,
+        on_fix: Optional[callable] = None,
+        on_refine: Optional[callable] = None,
+        on_remove: Optional[callable] = None
+    ):
+        self.on_add_callback = on_add
+        self.on_fix_callback = on_fix
+        self.on_refine_callback = on_refine
+        self.on_remove_callback = on_remove
+
+    def on_change_type_add(self, change: Any, context: Optional[Dict[str, Any]] = None) -> None:
+        if self.on_add_callback:
+            try:
+                self.on_add_callback(change, context)
+            except Exception:
+                pass
+
+    def on_change_type_fix(self, change: Any, context: Optional[Dict[str, Any]] = None) -> None:
+        if self.on_fix_callback:
+            try:
+                self.on_fix_callback(change, context)
+            except Exception:
+                pass
+
+    def on_change_type_refine(self, change: Any, context: Optional[Dict[str, Any]] = None) -> None:
+        if self.on_refine_callback:
+            try:
+                self.on_refine_callback(change, context)
+            except Exception:
+                pass
+
+    def on_change_type_remove(self, change: Any, context: Optional[Dict[str, Any]] = None) -> None:
+        if self.on_remove_callback:
+            try:
+                self.on_remove_callback(change, context)
+            except Exception:
+                pass

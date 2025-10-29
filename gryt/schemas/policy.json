@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Policy name (e.g., require_e2e_for_add)"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["change_type", "evolution_count", "custom"],
+            "description": "Policy type"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether this policy is active"
+          },
+          "config": {
+            "type": "object",
+            "description": "Policy-specific configuration",
+            "properties": {
+              "change_types": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["add", "fix", "refine", "remove"]
+                },
+                "description": "Change types this policy applies to"
+              },
+              "required_steps": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Required pipeline steps"
+              },
+              "min_evolutions": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Minimum evolutions required"
+              },
+              "custom_hook": {
+                "type": "string",
+                "description": "Path to custom hook module"
+              }
+            }
+          }
+        }
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "properties": {
+        "slack": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "webhook_url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "channels": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "on_events": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["evolution.completed", "evolution.failed", "generation.promoted"]
+              }
+            }
+          }
+        },
+        "prometheus": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "pushgateway_url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "job_name": {
+              "type": "string",
+              "default": "gryt_ci"
+            },
+            "metrics": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["evolution_count", "pass_rate", "promotion_count"]
+              }
+            }
+          }
+        },
+        "thresholds": {
+          "type": "object",
+          "properties": {
+            "pass_rate_min": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 80,
+              "description": "Minimum pass rate (%) to avoid alerts"
+            },
+            "failed_evolutions_max": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 2,
+              "description": "Maximum failed evolutions before alert"
+            }
+          }
+        }
+      }
+    }
+  }
+}

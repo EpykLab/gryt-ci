@@ -11,6 +11,8 @@ import typer
 from .evolution import Evolution
 from .generation import Generation
 from .data import SqliteData
+from .policy import PolicySet, PolicyViolation
+from .hook import PolicyHook
 
 
 GRYT_DIRNAME = ".gryt"
@@ -46,6 +48,51 @@ def cmd_evolution_start(
         version = version if version.startswith("v") else f"v{version}"
 
         data = _get_db()
+
+        # Find generation and change
+        gen_rows = data.query("SELECT generation_id FROM generations WHERE version = ?", (version,))
+        if not gen_rows:
+            typer.echo(f"Error: Generation {version} not found", err=True)
+            data.close()
+            return 2
+
+        generation_id = gen_rows[0]["generation_id"]
+
+        # Get change details
+        change_rows = data.query(
+            "SELECT type FROM generation_changes WHERE generation_id = ? AND change_id = ?",
+            (generation_id, change_id),
+        )
+        if not change_rows:
+            typer.echo(f"Error: Change {change_id} not found in generation {version}", err=True)
+            data.close()
+            return 2
+
+        change_type = change_rows[0]["type"]
+
+        # Load and validate policies (v0.5.0)
+        policy_path = Path.cwd() / GRYT_DIRNAME / "policies.yaml"
+        if policy_path.exists():
+            try:
+                policy_set = PolicySet.from_yaml_file(policy_path)
+                policy_hook = PolicyHook(policy_set)
+
+                # Validate policies for this evolution
+                # Note: pipeline_steps would be passed from Generation if available
+                policy_hook.validate_for_evolution(
+                    change_type=change_type,
+                    change_id=change_id,
+                    generation_id=generation_id,
+                    data=data,
+                    pipeline_steps=None,  # TODO: Load from generation if available
+                )
+                typer.echo(f"✓ Policy validation passed")
+            except PolicyViolation as e:
+                typer.echo(f"✗ Policy violation: {e.message}", err=True)
+                if e.details:
+                    typer.echo(f"  Details: {e.details}")
+                data.close()
+                return 2
 
         # Start evolution (will auto-generate RC tag and create git tag)
         evolution = Evolution.start_evolution(

@@ -180,6 +180,69 @@ def cmd_generation_show(version: str) -> int:
         return 2
 
 
+def cmd_generation_promote(version: str, no_tag: bool = False) -> int:
+    """Promote a generation to production"""
+    try:
+        # Ensure version starts with 'v'
+        version = version if version.startswith("v") else f"v{version}"
+
+        data = _get_db()
+
+        # Find generation by version
+        rows = data.query("SELECT generation_id FROM generations WHERE version = ?", (version,))
+        if not rows:
+            typer.echo(f"Error: Generation {version} not found", err=True)
+            data.close()
+            return 2
+
+        generation = Generation.from_db(data, rows[0]["generation_id"])
+        if not generation:
+            typer.echo(f"Error: Generation {version} not found", err=True)
+            data.close()
+            return 2
+
+        # Check if already promoted
+        if generation.status == "promoted":
+            typer.echo(f"Error: Generation {version} is already promoted", err=True)
+            data.close()
+            return 2
+
+        typer.echo(f"Promoting generation {version}...")
+        typer.echo(f"Running promotion gates...\n")
+
+        # Run promotion
+        result = generation.promote(data, auto_tag=not no_tag, repo_path=Path.cwd())
+
+        data.close()
+
+        # Display gate results
+        for gate_result in result["gate_results"]:
+            status_symbol = "✓" if gate_result["passed"] else "✗"
+            typer.echo(f"{status_symbol} {gate_result['gate']}: {gate_result['message']}")
+
+        typer.echo()
+
+        if not result["success"]:
+            typer.echo(f"✗ Promotion failed: {result['message']}", err=True)
+            typer.echo("\nTo promote, ensure all changes have at least one PASS evolution.")
+            typer.echo(f"Use 'gryt evolution list {version}' to see evolution status.")
+            return 2
+
+        typer.echo(f"✓ {result['message']}")
+        if result.get("tag_created"):
+            typer.echo(f"✓ Git tag created: {result['tag']}")
+        elif not no_tag:
+            typer.echo(f"⚠ Git tag creation failed (you may need to create it manually)")
+
+        typer.echo(f"\nGeneration {version} is now deployable!")
+
+        return 0
+
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        return 2
+
+
 # Register commands
 @generation_app.command("new", help="Create a new generation contract")
 def new_command(
@@ -202,4 +265,13 @@ def show_command(
     version: str = typer.Argument(..., help="Version to show (e.g., v2.2.0)"),
 ):
     code = cmd_generation_show(version)
+    raise typer.Exit(code)
+
+
+@generation_app.command("promote", help="Promote a generation to production")
+def promote_command(
+    version: str = typer.Argument(..., help="Version to promote (e.g., v2.2.0)"),
+    no_tag: bool = typer.Option(False, "--no-tag", help="Don't create git tag"),
+):
+    code = cmd_generation_promote(version, no_tag)
     raise typer.Exit(code)

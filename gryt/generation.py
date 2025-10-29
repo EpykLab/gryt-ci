@@ -6,6 +6,7 @@ A Generation is a release contract that declares what a version MUST contain.
 from __future__ import annotations
 
 import json
+import subprocess
 import uuid
 import yaml
 from pathlib import Path
@@ -256,3 +257,98 @@ class Generation:
         """List all generations from database"""
         rows = data.query("SELECT generation_id FROM generations ORDER BY created_at DESC")
         return [Generation.from_db(data, row["generation_id"]) for row in rows if Generation.from_db(data, row["generation_id"])]
+
+    def promote(
+        self,
+        data: SqliteData,
+        gates: Optional[List["PromotionGate"]] = None,
+        auto_tag: bool = True,
+        repo_path: Optional[Path] = None,
+    ) -> Dict[str, Any]:
+        """
+        Promote this generation to production.
+
+        This will:
+        1. Run all promotion gates
+        2. If all pass, create final version tag (vX.Y.Z)
+        3. Update status to 'promoted'
+        4. Emit generation.promoted event
+
+        Returns a dict with:
+            - success: bool
+            - message: str
+            - gate_results: List[GateResult]
+            - tag: str (if successful)
+        """
+        from .gates import get_default_gates
+
+        # Use default gates if none provided
+        if gates is None:
+            gates = get_default_gates()
+
+        # Run all gates
+        gate_results = []
+        all_passed = True
+
+        for gate in gates:
+            result = gate.check(self, data)
+            gate_results.append({
+                "gate": gate.name,
+                "passed": result.passed,
+                "message": result.message,
+                "details": result.details
+            })
+            if not result.passed:
+                all_passed = False
+
+        if not all_passed:
+            failed_gates = [r for r in gate_results if not r["passed"]]
+            return {
+                "success": False,
+                "message": f"{len(failed_gates)} promotion gate(s) failed",
+                "gate_results": gate_results
+            }
+
+        # All gates passed - promote!
+        self.status = "promoted"
+        self.promoted_at = datetime.now()
+        self.save_to_db(data, emit_event=False)  # Don't emit yet
+
+        # Create final version tag
+        tag_created = False
+        if auto_tag:
+            tag_created = self._create_final_tag(repo_path)
+
+        # Emit promotion event
+        bus = get_event_bus()
+        bus.emit("generation.promoted", {"generation": self.to_dict()})
+
+        return {
+            "success": True,
+            "message": f"Generation {self.version} promoted successfully",
+            "gate_results": gate_results,
+            "tag": self.version if tag_created else None,
+            "tag_created": tag_created
+        }
+
+    def _create_final_tag(self, repo_path: Optional[Path] = None) -> bool:
+        """
+        Create final version tag (vX.Y.Z) for this generation.
+
+        Returns True if successful, False otherwise.
+        """
+        repo = repo_path or Path.cwd()
+        try:
+            # Create annotated tag
+            change_summary = "\n".join([f"- [{c.type}] {c.title}" for c in self.changes])
+            message = f"Release {self.version}\n\n{self.description or ''}\n\nChanges:\n{change_summary}"
+
+            subprocess.run(
+                ["git", "tag", "-a", self.version, "-m", message],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False

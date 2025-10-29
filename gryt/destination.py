@@ -377,3 +377,230 @@ class GitHubReleaseDestination(Destination):
             except Exception as e:  # noqa: BLE001
                 results.append({"artifact": str(p), "status": "error", "error": str(e)})
         return results
+
+
+class SlackDestination(Destination):
+    """Send notifications to Slack via webhook.
+
+    Config:
+    - webhook_url: str (required) – Slack webhook URL
+    - channel: str (optional) – Override default channel (#channel or @user)
+    - username: str (optional) – Bot username
+    - icon_emoji: str (optional) – Bot icon emoji (e.g., ':robot_face:')
+    - message_template: str (optional) – Message template with {artifact} placeholder
+    - on_events: List[str] (optional) – Event types to notify on
+      (evolution.completed, evolution.failed, generation.promoted)
+
+    Notes:
+    - artifacts parameter is treated as a list of event payloads (dicts as JSON strings)
+    - Each artifact should be a JSON string containing event data
+    - Returns one result per notification sent
+    """
+
+    def publish(self, artifacts: Sequence[PathLike]) -> List[Dict[str, Any]]:
+        cfg = self.config
+        webhook_url = cfg.get("webhook_url")
+        if not webhook_url:
+            raise ValueError("SlackDestination requires config['webhook_url']")
+
+        channel = cfg.get("channel")
+        username = cfg.get("username", "Gryt CI")
+        icon_emoji = cfg.get("icon_emoji", ":robot_face:")
+        message_template = cfg.get("message_template", "Artifact: {artifact}")
+
+        results: List[Dict[str, Any]] = []
+
+        for artifact in artifacts:
+            try:
+                # If artifact is a path, read it; otherwise treat as event payload
+                artifact_str = str(artifact)
+                try:
+                    artifact_path = Path(artifact)
+                    if artifact_path.exists():
+                        with open(artifact_path, "r") as f:
+                            event_data = json.loads(f.read())
+                        message = self._format_event_message(event_data, message_template)
+                    else:
+                        # Treat as JSON string
+                        event_data = json.loads(artifact_str)
+                        message = self._format_event_message(event_data, message_template)
+                except (json.JSONDecodeError, OSError):
+                    # Fallback: use template with artifact path
+                    message = message_template.format(artifact=artifact_str)
+
+                # Build Slack payload
+                payload: Dict[str, Any] = {
+                    "text": message,
+                    "username": username,
+                    "icon_emoji": icon_emoji,
+                }
+                if channel:
+                    payload["channel"] = channel
+
+                # Send to Slack
+                body = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(
+                    url=webhook_url,
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    status_code = resp.getcode()
+                    if status_code == 200:
+                        results.append({
+                            "artifact": artifact_str,
+                            "status": "success",
+                            "details": {"message": message},
+                        })
+                    else:
+                        results.append({
+                            "artifact": artifact_str,
+                            "status": "error",
+                            "error": f"Slack returned status {status_code}",
+                        })
+
+            except urllib.error.HTTPError as e:
+                results.append({
+                    "artifact": str(artifact),
+                    "status": "error",
+                    "error": f"HTTP {e.code}: {e.reason}",
+                })
+            except Exception as e:  # noqa: BLE001
+                results.append({
+                    "artifact": str(artifact),
+                    "status": "error",
+                    "error": str(e),
+                })
+
+        return results
+
+    def _format_event_message(self, event_data: Dict[str, Any], template: str) -> str:
+        """Format event data into a Slack message"""
+        event_type = event_data.get("event_type", "unknown")
+
+        if event_type == "evolution.completed":
+            evolution = event_data.get("evolution", {})
+            return f"✓ Evolution completed: {evolution.get('tag', '?')} - {evolution.get('status', '?')}"
+        elif event_type == "evolution.failed":
+            evolution = event_data.get("evolution", {})
+            return f"✗ Evolution failed: {evolution.get('tag', '?')}"
+        elif event_type == "generation.promoted":
+            generation = event_data.get("generation", {})
+            return f"🚀 Generation promoted: {generation.get('version', '?')}"
+        else:
+            # Use template
+            return template.format(artifact=json.dumps(event_data))
+
+
+class PrometheusDestination(Destination):
+    """Push metrics to Prometheus Pushgateway.
+
+    Config:
+    - pushgateway_url: str (required) – Pushgateway URL (e.g., http://localhost:9091)
+    - job_name: str (default 'gryt_ci') – Prometheus job name
+    - instance: str (optional) – Instance label
+    - metrics: Dict[str, Any] (required) – Metrics to push, format:
+      {
+        "metric_name": {
+          "type": "gauge" | "counter" | "histogram",
+          "value": <number>,
+          "help": "Metric description",
+          "labels": {"label1": "value1", ...}
+        }
+      }
+    - extra_labels: Dict[str, str] (optional) – Additional labels for all metrics
+    - timeout: float (default 10) – Request timeout in seconds
+
+    Notes:
+    - Uses Prometheus text format for pushing metrics
+    - artifacts parameter is ignored; metrics come from config
+    - Returns a single result for the push operation
+    """
+
+    def publish(self, artifacts: Sequence[PathLike]) -> List[Dict[str, Any]]:
+        cfg = self.config
+        pushgateway_url = cfg.get("pushgateway_url")
+        if not pushgateway_url:
+            raise ValueError("PrometheusDestination requires config['pushgateway_url']")
+
+        job_name = cfg.get("job_name", "gryt_ci")
+        instance = cfg.get("instance")
+        metrics = cfg.get("metrics")
+        if not metrics:
+            raise ValueError("PrometheusDestination requires config['metrics']")
+
+        extra_labels = cfg.get("extra_labels", {})
+        timeout = cfg.get("timeout", 10)
+
+        try:
+            # Build Prometheus text format
+            lines: List[str] = []
+
+            for metric_name, metric_data in metrics.items():
+                metric_type = metric_data.get("type", "gauge")
+                metric_value = metric_data.get("value")
+                metric_help = metric_data.get("help", f"{metric_name} metric")
+                metric_labels = metric_data.get("labels", {})
+
+                # Merge labels
+                all_labels = {**extra_labels, **metric_labels}
+
+                # Add TYPE and HELP
+                lines.append(f"# TYPE {metric_name} {metric_type}")
+                lines.append(f"# HELP {metric_name} {metric_help}")
+
+                # Add metric with labels
+                if all_labels:
+                    label_str = ",".join([f'{k}="{v}"' for k, v in all_labels.items()])
+                    lines.append(f"{metric_name}{{{label_str}}} {metric_value}")
+                else:
+                    lines.append(f"{metric_name} {metric_value}")
+
+            body = "\n".join(lines).encode("utf-8")
+
+            # Build pushgateway URL with job and instance
+            url = f"{pushgateway_url.rstrip('/')}/metrics/job/{urllib.parse.quote(job_name)}"
+            if instance:
+                url += f"/instance/{urllib.parse.quote(instance)}"
+
+            # Push to Pushgateway
+            req = urllib.request.Request(
+                url=url,
+                data=body,
+                headers={"Content-Type": "text/plain; charset=utf-8"},
+                method="POST",
+            )
+
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                status_code = resp.getcode()
+                if status_code in (200, 202):
+                    return [{
+                        "artifact": "prometheus_metrics",
+                        "status": "success",
+                        "details": {
+                            "job": job_name,
+                            "instance": instance,
+                            "metrics_count": len(metrics),
+                        },
+                    }]
+                else:
+                    return [{
+                        "artifact": "prometheus_metrics",
+                        "status": "error",
+                        "error": f"Pushgateway returned status {status_code}",
+                    }]
+
+        except urllib.error.HTTPError as e:
+            return [{
+                "artifact": "prometheus_metrics",
+                "status": "error",
+                "error": f"HTTP {e.code}: {e.reason}",
+            }]
+        except Exception as e:  # noqa: BLE001
+            return [{
+                "artifact": "prometheus_metrics",
+                "status": "error",
+                "error": str(e),
+            }]

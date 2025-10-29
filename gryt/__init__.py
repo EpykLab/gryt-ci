@@ -20,11 +20,15 @@ from .runner import Runner
 from .pipeline import Pipeline
 from .runtime import Runtime, LocalRuntime
 from .versioning import Versioning, SimpleVersioning
-from .hook import Hook, PrintHook, HttpHook
-from .destination import Destination, CommandDestination, NpmRegistryDestination, PyPIDestination, GitHubReleaseDestination, ContainerRegistryDestination
+from .hook import Hook, PrintHook, HttpHook, PolicyHook, ChangeTypeHook
+from .destination import Destination, CommandDestination, NpmRegistryDestination, PyPIDestination, GitHubReleaseDestination, ContainerRegistryDestination, SlackDestination, PrometheusDestination
 from .publish import PublishDestinationStep
 from .envvalidate import EnvValidator, EnvVarValidator, ToolValidator
 from .containers import ContainerBuildStep
+from .generation import Generation, GenerationChange
+from .evolution import Evolution
+from .policy import Policy, PolicySet, PolicyViolation
+from .gates import PromotionGate, GateResult, AllChangesProvenGate, NoFailedEvolutionsGate, MinEvolutionsGate
 from .steps import (
     GoModDownloadStep,
     GoBuildStep,
@@ -53,6 +57,8 @@ __all__ = [
     "Hook",
     "PrintHook",
     "HttpHook",
+    "PolicyHook",
+    "ChangeTypeHook",
     # Destinations
     "Destination",
     "CommandDestination",
@@ -60,6 +66,8 @@ __all__ = [
     "PyPIDestination",
     "GitHubReleaseDestination",
     "ContainerRegistryDestination",
+    "SlackDestination",
+    "PrometheusDestination",
     "PublishDestinationStep",
     # Env validation
     "EnvValidator",
@@ -79,5 +87,19 @@ __all__ = [
     "CargoBuildStep",
     "CargoTestStep",
     # Validators
-    "ScytheValidator"
+    "ScytheValidator",
+    # Generations & Evolutions (v0.2.0, v0.3.0)
+    "Generation",
+    "Change",
+    "Evolution",
+    # Policies (v0.5.0)
+    "Policy",
+    "PolicySet",
+    "PolicyViolation",
+    # Promotion Gates (v0.4.0)
+    "PromotionGate",
+    "GateResult",
+    "AllChangesProvenGate",
+    "NoFailedEvolutionsGate",
+    "MinEvolutionsGate",
 ]

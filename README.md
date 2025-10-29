@@ -229,7 +229,7 @@ gryt generation promote v1.0.0
 
 # **gryt-ci Roadmap** – *From Current State to Full Contract-Driven CI*
 
-> **Current Version (v0.1.0)**: Basic pipeline execution, SQLite logging, catalog system.
+> **Current Version (v0.4.0)**: Promotion gates with 100% PASS validation.
 > **Target Vision**: Full **Generation/Evolution** contract engine with **secure evolvability**.
 
 ---
@@ -238,26 +238,52 @@ gryt generation promote v1.0.0
 
 | Feature | Status |
 |-------|--------|
-| `gryt init`, `gryt run` | Done |
-| Step & Pipeline execution | Done |
-| Local Runtime (no Docker) | Done |
-| Parallel Runners | Done |
-| SQLite DB (`.gryt/gryt.db`) | Done |
-| `gryt db query` | Done |
-| Language catalogs (`examples/language_*.py`) | Done |
-| Hooks (basic) | Done |
-| Version tagging (manual) | Done |
+| `gryt init`, `gryt run` | ✅ Done |
+| Step & Pipeline execution | ✅ Done |
+| Local Runtime (no Docker) | ✅ Done |
+| Parallel Runners | ✅ Done |
+| SQLite DB (`.gryt/gryt.db`) | ✅ Done |
+| `gryt db query` | ✅ Done |
+| Language catalogs (`examples/language_*.py`) | ✅ Done |
+| Hooks (basic) | ✅ Done |
+| Version tagging (manual) | ✅ Done |
+| **v0.2.0**: Generation contracts | ✅ Done |
+| `gryt generation new/list/show` | ✅ Done |
+| `.gryt/generations/*.yaml` | ✅ Done |
+| DB: `generations`, `generation_changes` | ✅ Done |
+| EventBus + CloudSyncHandler | ✅ Done |
+| `gryt config execution_mode` | ✅ Done |
+| Cloud API: Generation endpoints | ✅ Done |
+| **v0.3.0**: Evolution Engine | ✅ Done |
+| `gryt evolution start --change ID` | ✅ Done |
+| Auto RC tagging (`vX.Y.Z-rc.N`) | ✅ Done |
+| DB: `evolutions` table | ✅ Done |
+| `gryt evolution list` | ✅ Done |
+| Git tag creation (annotated) | ✅ Done |
+| Cloud API: Evolution endpoints | ✅ Done |
+| **v0.4.0**: Promotion Gates | ✅ Done |
+| `gryt generation promote` | ✅ Done |
+| PromotionGate system (pluggable) | ✅ Done |
+| 100% PASS validation | ✅ Done |
+| AllChangesProvenGate | ✅ Done |
+| NoFailedEvolutionsGate | ✅ Done |
+| Auto Git tag on promote (vX.Y.Z) | ✅ Done |
+| Cloud API: Promotion endpoint | ✅ Done |
+| **v0.5.0**: Policy & Hooks++ | ✅ Done |
+| Change-type hooks (`on_change_type_*`) | ✅ Done |
+| Policy YAML schema & validation | ✅ Done |
+| PolicyHook & ChangeTypeHook | ✅ Done |
+| Policy enforcement in evolution start | ✅ Done |
+| SlackDestination for notifications | ✅ Done |
+| PrometheusDestination for metrics | ✅ Done |
+| Alerts configuration (thresholds in schema) | ✅ Done |
 
 ---
 
-## Roadmap: Gaps & Milestones
+## Roadmap: Remaining Milestones
 
 | Milestone | Features | Target |
 |---------|----------|--------|
-| **v0.2.0** – *Contract Foundations* | `gryt generation new/edit/list`<br>`.gryt/generations/*.yaml`<br>DB: `generations`, `generation_changes` tables | Q4 2025 |
-| **v0.3.0** – *Evolution Engine* | `gryt evolution start --change ID`<br>Auto RC tagging (`vX.Y.Z-rc.N`)<br>DB: `evolutions` table<br>Link Evolution → Pipeline run | Q1 2026 |
-| **v0.4.0** – *Promotion Gates* | `gryt generation promote` → 100% PASS required<br>Fail if any Change lacks PASS Evolution<br>Auto Git tag on promote | Q1 2026 |
-| **v0.5.0** – *Policy & Hooks++* | Hook: `on_change_type`<br>Policy: `require_e2e_for_add`<br>Destinations: Slack/Prometheus alerts | Q2 2026 |
 | **v0.6.0** – *Templates & UX* | `gryt new --template go-release`<br>`gryt dashboard` (TUI)<br>Web UI (optional) | Q2 2026 |
 | **v1.0.0** – *Secure Evolvability Certified* | NIST 800-161 audit report<br>Full audit trail export<br>Rollback via DB<br>Hot-fix Generation workflow | Q3 2026 |
 
@@ -265,25 +291,26 @@ gryt generation promote v1.0.0
 
 ## Gap Analysis
 
-| Required for Vision | Current | Gap |
-|---------------------|---------|-----|
-| **Generation contract** | None | Add CLI + YAML + DB |
-| **Evolution tagging** | Manual Git tag | Auto-increment RC |
-| **Change Types** | None | Add to YAML + DB |
-| **Promotion gate** | None | 100% PASS logic |
-| **Policy hooks** | Basic | Add `on_change_type`, `require_*` |
-| **Hot-fix path** | Same as normal | Documented mini-Generation |
-| **Audit export** | Raw DB | CSV/JSON/export CLI |
+| Required for Vision | Current | Status |
+|---------------------|---------|--------|
+| **Generation contract** | ✅ CLI + YAML + DB | Done (v0.2.0) |
+| **Evolution tagging** | ✅ Auto-increment RC | Done (v0.3.0) |
+| **Change Types** | ✅ YAML + DB | Done (v0.2.0) |
+| **Promotion gate** | ✅ Pluggable gates | Done (v0.4.0) |
+| **Policy hooks** | ✅ YAML + Hooks + Alerts | Done (v0.5.0) |
+| **Hot-fix path** | ❌ None | Add (v1.0.0) |
+| **Audit export** | ⚠️ Raw DB | Export CLI (v1.0.0) |
 
 ---
 
 ## Next Steps (Immediate)
 
-1. **Merge `CONCEPTS.md` and `PHILOSOPHY.md`** into main README
-2. **Create `gryt generation` CLI stub**
-3. **Add `generations/` folder + YAML schema**
-4. **Extend DB schema** (see below)
-5. **Tag v0.2.0** on completion
+1. ✅ **Generation contracts** – CLI, YAML, DB (v0.2.0)
+2. ✅ **Evolution engine** – RC tagging, Git tags (v0.3.0)
+3. ✅ **Promotion gates** – 100% PASS validation (v0.4.0)
+4. ✅ **Policy system** – Change-type hooks, alerts (v0.5.0)
+5. 📋 **TUI dashboard** – Interactive UI (v0.6.0)
+6. 📋 **NIST compliance** – Audit export (v1.0.0)
 
 ---
 

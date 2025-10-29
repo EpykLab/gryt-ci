@@ -254,6 +254,10 @@ class GrytCloudClient:
         """Delete a generation."""
         return self._request("DELETE", f"/api/v1/generations/{generation_id}")
 
+    def promote_generation(self, generation_id: str) -> dict[str, Any]:
+        """Promote a generation to production."""
+        return self._request("POST", f"/api/v1/generations/{generation_id}/promote")
+
     # Evolutions (v0.3.0)
     def create_evolution(self, evolution_data: dict[str, Any]) -> dict[str, Any]:
         """Create a new evolution."""
