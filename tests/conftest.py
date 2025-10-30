@@ -34,6 +34,11 @@ def test_db_path(temp_dir):
 @pytest.fixture
 def gryt_project(temp_dir):
     """Provide a temporary gryt project directory with .gryt structure"""
+    # Create .git folder (for repo root detection)
+    git_dir = temp_dir / ".git"
+    git_dir.mkdir()
+
+    # Create .gryt structure
     gryt_dir = temp_dir / ".gryt"
     gryt_dir.mkdir()
     (gryt_dir / "generations").mkdir()

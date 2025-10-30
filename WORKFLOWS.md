@@ -765,6 +765,311 @@ cp .gryt/gryt.db backups/gryt-q1-2024.db
 
 ---
 
+## Workflow 8: Distributed Team Collaboration with Sync
+
+### Scenario
+
+Team distributed across multiple locations working on same codebase. Need to coordinate releases, share generation contracts, avoid version conflicts.
+
+### Execution Mode
+
+```bash
+gryt sync config --mode hybrid
+```
+
+Hybrid mode: manual sync during development, auto-sync on promotion.
+
+### Collaboration Model: Shared Generation
+
+**Developer A (San Francisco) - Creates Contract**
+
+```bash
+# Create generation contract
+gryt generation new v5.0.0
+
+# Edit contract
+cat > .gryt/generations/v5.0.0.yaml <<EOF
+version: v5.0.0
+description: "Major refactor - authentication system"
+changes:
+  - change_id: AUTH-001
+    type: add
+    title: OAuth2 integration
+  - change_id: AUTH-002
+    type: refine
+    title: Session management refactor
+  - change_id: AUTH-003
+    type: remove
+    title: Deprecated legacy auth endpoints
+EOF
+
+# Push contract to cloud
+gryt sync push --version v5.0.0
+```
+
+Output:
+```
+Push complete
+  Created: 1
+  Updated: 0
+```
+
+**Developer B (Tokyo) - Pulls Contract**
+
+```bash
+# Check cloud state
+gryt sync status
+
+# Pull latest changes
+gryt sync pull
+```
+
+Output:
+```
+Pull complete
+  New generations: 1
+  Updated generations: 0
+  Conflicts: 0
+```
+
+**Developer A - Works on OAuth2**
+
+```bash
+# Start evolution for AUTH-001
+gryt evolution start v5.0.0 --change AUTH-001
+
+# Run pipeline
+gryt run oauth-integration
+
+# Evolution passes
+gryt evolution list v5.0.0
+```
+
+Output:
+```
+v5.0.0-rc.1  AUTH-001  pass
+```
+
+**Developer B - Works on Session Management**
+
+```bash
+# Start evolution for AUTH-002
+gryt evolution start v5.0.0 --change AUTH-002
+
+# Run pipeline
+gryt run session-refactor
+
+# Evolution passes
+gryt evolution list v5.0.0
+```
+
+Output:
+```
+v5.0.0-rc.1  AUTH-001  pass
+v5.0.0-rc.2  AUTH-002  pass
+```
+
+**Developer A - Removes Legacy Endpoints**
+
+```bash
+# Pull latest evolutions
+gryt sync pull
+
+# See B's work
+gryt evolution list v5.0.0
+# v5.0.0-rc.1  AUTH-001  pass
+# v5.0.0-rc.2  AUTH-002  pass
+
+# Start evolution for AUTH-003
+gryt evolution start v5.0.0 --change AUTH-003
+
+# Run pipeline
+gryt run remove-legacy-auth
+
+# All changes proven
+gryt generation show v5.0.0
+```
+
+Output:
+```
+Generation: v5.0.0
+Status: draft
+Changes:
+  ✓ AUTH-001 (proven by v5.0.0-rc.1)
+  ✓ AUTH-002 (proven by v5.0.0-rc.2)
+  ✓ AUTH-003 (proven by v5.0.0-rc.3)
+```
+
+**Developer A - Promotes**
+
+```bash
+# Promote to production
+gryt generation promote v5.0.0
+```
+
+Output:
+```
+Promotion successful
+  Version: v5.0.0
+  All changes proven: 3/3
+  Synced to cloud: yes
+```
+
+Auto-synced to cloud in hybrid mode.
+
+**Developer B - Sees Promotion**
+
+```bash
+# Pull latest state
+gryt sync pull
+
+# Verify promotion
+gryt generation show v5.0.0
+```
+
+Output:
+```
+Generation: v5.0.0
+Status: promoted
+Promoted at: 2025-10-29T10:15:00Z
+```
+
+### Conflict Scenario: Same Version
+
+**Developer A**
+
+```bash
+# Creates v6.0.0
+gryt generation new v6.0.0
+```
+
+**Developer B (doesn't pull first)**
+
+```bash
+# Also creates v6.0.0
+gryt generation new v6.0.0
+```
+
+Both work independently.
+
+**Developer A promotes first**
+
+```bash
+gryt generation promote v6.0.0
+# Auto-synced to cloud
+```
+
+**Developer B tries to push**
+
+```bash
+gryt sync push --version v6.0.0
+```
+
+Output:
+```
+Push complete
+  Created: 0
+  Updated: 0
+  Errors: 1
+    • v6.0.0: Version v6.0.0 already exists in cloud
+      Resolution: Use different version or pull to sync
+```
+
+**Developer B resolves conflict**
+
+```bash
+# Pull A's version
+gryt sync pull
+
+# Check conflict
+gryt generation list
+# v6.0.0 (promoted, from cloud)
+# v6.0.0 (draft, local)
+
+# Rename local version
+gryt generation rename v6.0.0 v6.1.0
+
+# Continue work on v6.1.0
+gryt evolution start v6.1.0 --change FEAT-100
+```
+
+### Best Practices for Distributed Teams
+
+**1. Pull-before-create workflow:**
+
+```bash
+# Always check cloud state first
+gryt sync pull
+
+# Then create new versions
+gryt generation new v7.0.0
+```
+
+**2. Use version ranges per team:**
+
+```bash
+# Team A: v1.x.x
+gryt generation new v1.0.0
+gryt generation new v1.1.0
+
+# Team B: v2.x.x
+gryt generation new v2.0.0
+gryt generation new v2.1.0
+```
+
+**3. Sync before promotion:**
+
+```bash
+# Check cloud state
+gryt sync status --version v8.0.0
+
+# Pull any updates
+gryt sync pull
+
+# Then promote
+gryt generation promote v8.0.0
+```
+
+**4. Regular sync checks:**
+
+```bash
+# Daily morning routine
+gryt sync pull
+gryt sync status
+
+# See what team has been working on
+gryt generation list
+```
+
+### Sync Status Monitoring
+
+```bash
+# Check overall sync health
+gryt sync status
+```
+
+Output:
+```
+Sync Status Summary
+  Total generations: 15
+  Synced: 12
+  Pending: 2
+  Conflicts: 1
+
+Generations:
+Version    Status       Remote ID      Last Synced
+v1.0.0     synced       gen-abc123     2025-10-28
+v2.0.0     synced       gen-def456     2025-10-29
+v3.0.0     pending      —              —
+v4.0.0     conflict     —              —
+```
+
+### Outcome
+
+Distributed team successfully collaborates on v5.0.0 without conflicts. Clear contract (generation) shared via cloud. Individual developers work on different changes independently. Sync system prevents version conflicts. Full audit trail maintained locally and in cloud.
+
+---
+
 ## Summary
 
 **Standard Release:** Generation -> Evolutions -> Promote
@@ -801,3 +1106,10 @@ cp .gryt/gryt.db backups/gryt-q1-2024.db
 - Complete change history
 - NIST 800-161 compliance
 - Quarterly reporting
+
+**Distributed Collaboration:** Cloud sync for teams
+- Bidirectional sync (pull/push)
+- Version conflict detection
+- Shared generation contracts
+- Independent evolution work
+- Pull-before-create best practice

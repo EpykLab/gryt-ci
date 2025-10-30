@@ -111,6 +111,8 @@ class Generation:
     @classmethod
     def from_db(cls, data: SqliteData, generation_id: str) -> Optional[Generation]:
         """Load a Generation from the database"""
+        from datetime import datetime
+
         rows = data.query(
             "SELECT * FROM generations WHERE generation_id = ?", (generation_id,)
         )
@@ -133,6 +135,21 @@ class Generation:
             for c in changes_rows
         ]
 
+        # Parse datetime strings from DB
+        created_at = row.get("created_at")
+        if created_at and isinstance(created_at, str):
+            try:
+                created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                created_at = None
+
+        promoted_at = row.get("promoted_at")
+        if promoted_at and isinstance(promoted_at, str):
+            try:
+                promoted_at = datetime.fromisoformat(promoted_at.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                promoted_at = None
+
         return cls(
             generation_id=row["generation_id"],
             version=row["version"],
@@ -142,8 +159,8 @@ class Generation:
             status=row["status"],
             sync_status=row.get("sync_status", "not_synced"),
             remote_id=row.get("remote_id"),
-            created_at=row.get("created_at"),
-            promoted_at=row.get("promoted_at"),
+            created_at=created_at,
+            promoted_at=promoted_at,
         )
 
     def save_to_db(self, data: SqliteData, emit_event: bool = True) -> None:

@@ -27,8 +27,13 @@ evolution_app = typer.Typer(
 
 def _get_db() -> SqliteData:
     """Get database connection from .gryt directory"""
-    db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
-    if not db_path.exists():
+    from .paths import get_repo_db_path, ensure_in_repo
+
+    # Ensure we're in a repo
+    ensure_in_repo()
+
+    db_path = get_repo_db_path()
+    if not db_path or not db_path.exists():
         typer.echo(
             f"Error: Database not found at {db_path}. Run 'gryt init' first.",
             err=True,
@@ -71,8 +76,11 @@ def cmd_evolution_start(
         change_type = change_rows[0]["type"]
 
         # Load and validate policies (v0.5.0)
-        policy_path = Path.cwd() / GRYT_DIRNAME / "policies.yaml"
-        if policy_path.exists():
+        from .paths import get_repo_gryt_dir
+        repo_gryt_dir = get_repo_gryt_dir()
+        policy_path = repo_gryt_dir / "policies.yaml" if repo_gryt_dir else None
+
+        if policy_path and policy_path.exists():
             try:
                 policy_set = PolicySet.from_yaml_file(policy_path)
                 policy_hook = PolicyHook(policy_set)
@@ -95,12 +103,15 @@ def cmd_evolution_start(
                 return 2
 
         # Start evolution (will auto-generate RC tag and create git tag)
+        from .paths import find_repo_root
+        repo_root = find_repo_root()
+
         evolution = Evolution.start_evolution(
             data=data,
             version=version,
             change_id=change_id,
             auto_tag=not no_tag,
-            repo_path=Path.cwd(),
+            repo_path=repo_root or Path.cwd(),
         )
 
         data.close()

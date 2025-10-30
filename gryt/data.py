@@ -243,6 +243,32 @@ class SqliteData(Data):
                 )
                 """
             )
+            # sync_metadata (v1.0.0 - distributed sync)
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sync_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            # audit_events (v1.0.0 - audit trail)
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS audit_events (
+                    event_id TEXT PRIMARY KEY,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    event_type TEXT NOT NULL,
+                    resource_type TEXT NOT NULL,
+                    resource_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    status TEXT DEFAULT 'success',
+                    actor TEXT DEFAULT 'system',
+                    details_json TEXT
+                )
+                """
+            )
             self.conn.commit()
 
     def _jsonify(self, value: Any) -> Any:

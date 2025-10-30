@@ -18,8 +18,13 @@ def cmd_dashboard(refresh: float = 2.0) -> int:
     """Launch the TUI dashboard"""
     try:
         # Find database
-        db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
-        if not db_path.exists():
+        from .paths import get_repo_db_path, ensure_in_repo
+
+        # Ensure we're in a repo
+        ensure_in_repo()
+
+        db_path = get_repo_db_path()
+        if not db_path or not db_path.exists():
             typer.echo(
                 f"Error: Database not found at {db_path}. Run 'gryt init' first.",
                 err=True,

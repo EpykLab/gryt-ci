@@ -17,6 +17,7 @@ from .generation_cli import generation_app
 from .evolution_cli import evolution_app
 from .new_cli import new_app
 from .audit_cli import audit_app
+from .sync_cli import sync_app
 from .dashboard_cli import dashboard_command
 from .config import Config
 
@@ -35,6 +36,7 @@ app.add_typer(cloud_app, name="cloud")
 app.add_typer(generation_app, name="generation")
 app.add_typer(evolution_app, name="evolution")
 app.add_typer(audit_app, name="audit")
+app.add_typer(sync_app, name="sync")
 
 
 def _load_module_from_path(path: Path) -> ModuleType:
@@ -62,15 +64,27 @@ def _get_pipeline_from_module(mod: ModuleType) -> Optional[Pipeline]:
 
 
 def _resolve_pipeline_script(arg: str, base: Path) -> Path:
+    from .paths import get_repo_gryt_dir
+
     # If arg is a valid file path, use it
     p = Path(arg)
     if p.exists():
         return p.resolve()
-    # Try ./.gryt/pipelines/<arg>.py
+
+    # Try to find repo .gryt/pipelines/<arg>.py
+    repo_gryt_dir = get_repo_gryt_dir()
+    if repo_gryt_dir:
+        pipelines_dir = repo_gryt_dir / PIPELINES_SUBDIR
+        cand = pipelines_dir / (arg if arg.endswith(".py") else f"{arg}.py")
+        if cand.exists():
+            return cand.resolve()
+
+    # Fallback: try relative to base (for backward compatibility)
     gryt_dir = base / GRYT_DIRNAME / PIPELINES_SUBDIR
     cand = gryt_dir / (arg if arg.endswith(".py") else f"{arg}.py")
     if cand.exists():
         return cand.resolve()
+
     # As a last attempt, treat arg relative to CWD
     return (base / arg).resolve()
 
@@ -135,16 +149,28 @@ def cmd_validate(script: str) -> int:
 
 
 def _ensure_gryt_structure(root: Path, force: bool = False) -> Path:
+    from .config import Config, GLOBAL_CONFIG_PATH
+
     gryt_dir = root / GRYT_DIRNAME
     if gryt_dir.exists() and force:
         shutil.rmtree(gryt_dir)
     # Create directories
     (gryt_dir / PIPELINES_SUBDIR).mkdir(parents=True, exist_ok=True)
     (gryt_dir / MANIFESTS_SUBDIR).mkdir(parents=True, exist_ok=True)
-    # Create config file if missing
-    cfg = gryt_dir / CONFIG_FILENAME
-    if not cfg.exists():
-        cfg.write_text("")
+
+    # Create config file and copy global config if available
+    cfg_path = gryt_dir / CONFIG_FILENAME
+    if not cfg_path.exists() or force:
+        # Create local config with hierarchy enabled
+        local_config = Config(config_path=cfg_path, enable_hierarchy=True)
+
+        # Copy values from global config if it exists
+        if GLOBAL_CONFIG_PATH.exists():
+            local_config.copy_from_global()
+
+        # Save local config (even if empty, creates the file)
+        local_config.save()
+
     # Create sqlite db file (and initialize schema)
     db_path = gryt_dir / DEFAULT_DB_RELATIVE
     try:
@@ -386,7 +412,17 @@ PIPELINE = Pipeline([runner], data=data, runtime=runtime{validators_arg})
 
 
 def cmd_db(db: Optional[Path]) -> int:
-    db_path = Path(db) if db else (Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE)
+    from .paths import get_repo_db_path
+
+    # Use provided db path, otherwise try to find repo db
+    if db:
+        db_path = Path(db)
+    else:
+        db_path = get_repo_db_path()
+        if not db_path:
+            # Fallback to current directory for backward compatibility
+            db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
+
     if not db_path.exists():
         typer.echo(json.dumps({"error": f"Database not found: {db_path}"}, indent=2))
         return 2
@@ -504,7 +540,17 @@ def cmd_migrate(db: Optional[Path]) -> int:
     """
     Run in-place schema migrations on the gryt SQLite database.
     """
-    db_path = Path(db) if db else (Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE)
+    from .paths import get_repo_db_path
+
+    # Use provided db path, otherwise try to find repo db
+    if db:
+        db_path = Path(db)
+    else:
+        db_path = get_repo_db_path()
+        if not db_path:
+            # Fallback to current directory for backward compatibility
+            db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
+
     if not db_path.exists():
         typer.echo(json.dumps({"error": f"Database not found: {db_path}"}))
         return 2
@@ -537,7 +583,7 @@ def migrate_command(
 def cmd_config_set(key: str, value: str) -> int:
     """Set a configuration value"""
     try:
-        config = Config()
+        config = Config.load_with_repo_context()
 
         # Validate execution_mode
         if key == "execution_mode":
@@ -557,7 +603,7 @@ def cmd_config_set(key: str, value: str) -> int:
 def cmd_config_get(key: Optional[str]) -> int:
     """Get configuration value(s)"""
     try:
-        config = Config()
+        config = Config.load_with_repo_context()
         if key:
             value = config.get(key)
             if value is None:
@@ -603,9 +649,14 @@ def compliance_command(
 ):
     """Generate NIST 800-161 compliance report"""
     from .compliance import generate_compliance_report
+    from .paths import get_repo_db_path
 
     try:
-        db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
+        db_path = get_repo_db_path()
+        if not db_path:
+            # Fallback to current directory
+            db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
+
         if not db_path.exists():
             typer.echo(
                 f"Error: Database not found at {db_path}. Run 'gryt init' first.",

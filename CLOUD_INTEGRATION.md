@@ -334,6 +334,16 @@ Output shows created resources and their IDs.
 
 ## Generation/Evolution Sync
 
+### Bidirectional Sync Design (v1.0.0)
+
+gryt-ci uses **version-based locking** to prevent conflicts in distributed teams. Versions are unique identifiers - once promoted, they're immutable.
+
+**Key Principles:**
+- Pull is always safe (never overwrites local-only work)
+- Push checks for version conflicts before creating
+- `remote_id` links local and cloud records
+- `sync_status` tracks state: not_synced, syncing, synced, conflict, failed
+
 ### Local-first Architecture
 
 All operations start local:
@@ -352,21 +362,131 @@ gryt evolution start v1.0.0 --change FEAT-001
 gryt run my-pipeline
 ```
 
+### Manual Sync Commands
+
+**Pull from cloud to local:**
+```bash
+gryt sync pull
+```
+Fetches all generations and evolutions from cloud, updates local database. Safe - won't overwrite local-only work.
+
+**Push local to cloud:**
+```bash
+# Push all pending generations
+gryt sync push
+
+# Push specific version
+gryt sync push --version v1.0.0
+
+# Push completed evolutions
+gryt sync push --evolutions
+```
+Checks for version conflicts before creating. If version exists in cloud, shows error with resolution steps.
+
+**Check sync status:**
+```bash
+# Summary
+gryt sync status
+
+# Specific version
+gryt sync status --version v1.0.0
+```
+
+**Configure execution mode:**
+```bash
+gryt sync config --mode hybrid
+```
+
 ### Automatic Sync
 
 **Local mode:**
-- No sync
+- No auto-sync, manual only via `gryt sync push/pull`
 
 **Cloud mode:**
-- `generation.created` → Sync to cloud immediately
-- `generation.updated` → Sync update
-- `generation.promoted` → Sync promotion
-- `evolution.created` → Sync immediately
-- `evolution.completed` → Sync result
+- `generation.created` → Push to cloud immediately
+- `generation.updated` → Push update
+- `generation.promoted` → Push promotion
+- `evolution.created` → Push immediately
+- `evolution.completed` → Push result
 
-**Hybrid mode:**
-- Only `generation.promoted` → Sync
-- Only `evolution.completed` → Sync (if pass)
+**Hybrid mode (recommended):**
+- Only `generation.promoted` → Push
+- Only `evolution.completed` → Push (if pass)
+
+### Conflict Detection
+
+**Pull conflicts:**
+Same version exists locally and in cloud with different `remote_id`.
+
+**Resolution:**
+```bash
+# Option 1: Rename local version
+gryt generation rename v1.0.0 v1.0.1
+
+# Option 2: Delete local version (if cloud version is correct)
+gryt generation delete v1.0.0
+
+# Then retry pull
+gryt sync pull
+```
+
+**Push conflicts:**
+Attempt to create generation with version that already exists in cloud.
+
+**Resolution:**
+```bash
+# Option 1: Pull cloud version first
+gryt sync pull
+
+# Option 2: Use different version
+gryt generation rename v1.0.0 v1.0.1
+gryt sync push --version v1.0.1
+```
+
+### Collaboration Models
+
+**Model 1: Independent Releases**
+```bash
+# Developer A
+gryt generation new v1.0.0
+gryt generation promote v1.0.0
+# Auto-synced in hybrid mode
+
+# Developer B (different version range)
+gryt generation new v2.0.0
+gryt generation promote v2.0.0
+# No conflicts
+```
+
+**Model 2: Collaborative Release**
+```bash
+# Developer A creates contract
+gryt generation new v3.0.0
+gryt sync push --version v3.0.0
+
+# Developer B pulls contract
+gryt sync pull
+
+# Both work on different changes
+# A: gryt evolution start v3.0.0 --change FEAT-001
+# B: gryt evolution start v3.0.0 --change FEAT-002
+
+# Both complete evolutions, A promotes
+gryt generation promote v3.0.0
+```
+
+**Model 3: Pull-before-create**
+```bash
+# Always check cloud state first
+gryt sync pull
+
+# Create new version
+gryt generation new v4.0.0
+
+# Work and promote
+gryt evolution start v4.0.0 --change FEAT-003
+gryt generation promote v4.0.0
+```
 
 ### Sync Mechanism
 
@@ -374,12 +494,11 @@ Uses EventBus and CloudSyncHandler:
 
 ```python
 # Automatically attached on gryt init if credentials exist
-from gryt.sync import CloudSyncHandler
+from gryt.sync import CloudSyncHandler, get_cloud_sync_handler
 from gryt.cloud_client import GrytCloudClient
 
 client = GrytCloudClient(username="...", password="...")
-handler = CloudSyncHandler(client, execution_mode="hybrid")
-handler.attach()  # Listen to events
+handler = get_cloud_sync_handler(client, execution_mode="hybrid")
 ```
 
 When event fires:
@@ -387,18 +506,10 @@ When event fires:
 2. Event emitted
 3. CloudSyncHandler receives event
 4. Checks execution_mode
-5. If should sync: API call to cloud
-6. Cloud stores in PostgreSQL
-7. `remote_id` saved to local DB for future updates
-
-### Conflict Resolution
-
-Local always wins. Cloud is replica.
-
-If sync fails:
-- `sync_status` set to `failed` in local DB
-- Manual retry: `gryt cloud sync --force`
-- Check sync status: `gryt generation show <version>`
+5. If should sync: calls CloudSync.push()
+6. CloudSync checks for version conflicts
+7. Cloud stores in PostgreSQL
+8. `remote_id` and `sync_status` saved to local DB
 
 ---
 

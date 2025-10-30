@@ -14,7 +14,7 @@ cloud_app = typer.Typer(name="cloud", help="Manage Gryt Cloud resources", no_arg
 
 def _get_client() -> GrytCloudClient:
     """Get an authenticated cloud client."""
-    config = Config()
+    config = Config.load_with_repo_context()
     if not config.has_credentials():
         typer.echo("Error: Not logged in. Run 'gryt cloud login' first.", err=True)
         raise typer.Exit(1)
@@ -35,7 +35,7 @@ def login(
     method: str = typer.Option("credentials", "--method", "-m", help="Authentication method (credentials or api-key)"),
 ):
     """Log in to Gryt Cloud by saving credentials."""
-    config = Config()
+    config = Config.load_with_repo_context()
     if method == "api-key":
         api_key_id = typer.prompt("API key ID")
         api_key_secret = typer.prompt("API key secret", hide_input=True)
@@ -69,7 +69,7 @@ def signup(
         result = client.create_account(username=username, password=password)
         typer.echo(json.dumps(result, indent=2))
         # Auto-login after signup
-        config = Config()
+        config = Config.load_with_repo_context()
         config.set("username", username)
         config.set("password", password)
         config.save()
@@ -82,7 +82,7 @@ def signup(
 @cloud_app.command("logout", help="Remove saved credentials")
 def logout():
     """Log out by removing saved credentials."""
-    config = Config()
+    config = Config.load_with_repo_context()
     config.set("username", None)
     config.set("password", None)
     config.set("api_key_id", None)
@@ -94,7 +94,7 @@ def logout():
 @cloud_app.command("whoami", help="Show current user")
 def whoami():
     """Display the currently logged-in user."""
-    config = Config()
+    config = Config.load_with_repo_context()
     if config.api_key_id:
         typer.echo(f"Logged in with API key: {config.api_key_id}")
     elif config.username:

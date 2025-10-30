@@ -254,6 +254,14 @@ class GrytCloudClient:
         """Delete a generation."""
         return self._request("DELETE", f"/api/v1/generations/{generation_id}")
 
+    def get_generation_by_version(self, version: str) -> dict[str, Any]:
+        """Get a generation by version string."""
+        generations = self.list_generations()
+        for gen in generations.get("generations", []):
+            if gen.get("version") == version:
+                return gen
+        raise RuntimeError(f"Generation with version '{version}' not found in cloud")
+
     def promote_generation(self, generation_id: str) -> dict[str, Any]:
         """Promote a generation to production."""
         return self._request("POST", f"/api/v1/generations/{generation_id}/promote")

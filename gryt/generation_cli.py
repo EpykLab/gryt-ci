@@ -29,8 +29,13 @@ generation_app = typer.Typer(
 
 def _get_db() -> SqliteData:
     """Get database connection from .gryt directory"""
-    db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
-    if not db_path.exists():
+    from .paths import get_repo_db_path, ensure_in_repo
+
+    # Ensure we're in a repo
+    ensure_in_repo()
+
+    db_path = get_repo_db_path()
+    if not db_path or not db_path.exists():
         typer.echo(
             f"Error: Database not found at {db_path}. Run 'gryt init' first.",
             err=True,
@@ -41,7 +46,20 @@ def _get_db() -> SqliteData:
 
 def _get_generations_dir() -> Path:
     """Get or create .gryt/generations directory"""
-    gen_dir = Path.cwd() / GRYT_DIRNAME / GENERATIONS_SUBDIR
+    from .paths import get_repo_gryt_dir, ensure_in_repo
+
+    # Ensure we're in a repo
+    ensure_in_repo()
+
+    repo_gryt_dir = get_repo_gryt_dir()
+    if not repo_gryt_dir:
+        typer.echo(
+            f"Error: Not in a gryt repository. Run 'gryt init' first.",
+            err=True,
+        )
+        raise typer.Exit(2)
+
+    gen_dir = repo_gryt_dir / GENERATIONS_SUBDIR
     gen_dir.mkdir(parents=True, exist_ok=True)
     return gen_dir
 

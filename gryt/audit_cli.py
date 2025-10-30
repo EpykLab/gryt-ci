@@ -26,8 +26,13 @@ audit_app = typer.Typer(
 
 def _get_db_path() -> Path:
     """Get database path"""
-    db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
-    if not db_path.exists():
+    from .paths import get_repo_db_path, ensure_in_repo
+
+    # Ensure we're in a repo
+    ensure_in_repo()
+
+    db_path = get_repo_db_path()
+    if not db_path or not db_path.exists():
         typer.echo(
             f"Error: Database not found at {db_path}. Run 'gryt init' first.",
             err=True,
@@ -180,8 +185,11 @@ def cmd_hotfix_promote(version: str) -> int:
 
             workflow = HotfixWorkflow(data)
 
+            from .paths import find_repo_root
+            repo_root = find_repo_root()
+
             typer.echo(f"Promoting hot-fix: {version}")
-            result = workflow.promote_hotfix(generation, auto_tag=True, repo_path=Path.cwd())
+            result = workflow.promote_hotfix(generation, auto_tag=True, repo_path=repo_root or Path.cwd())
 
             if result["success"]:
                 typer.echo(f"✓ Hot-fix promoted successfully")

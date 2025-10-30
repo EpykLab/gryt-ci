@@ -533,6 +533,15 @@ gryt audit hotfix <base-version> -i <id>     # Create hot-fix
 # Compliance
 gryt compliance -o <file>                    # Generate compliance report
 
+# Cloud Sync
+gryt sync pull                               # Pull changes from cloud
+gryt sync push                               # Push local changes to cloud
+gryt sync push --version <version>           # Push specific version
+gryt sync push --evolutions                  # Push completed evolutions
+gryt sync status                             # Show sync status summary
+gryt sync status --version <version>         # Show status for specific version
+gryt sync config --mode <local|cloud|hybrid> # Set execution mode
+
 # Database
 gryt db query "<sql>"                        # Run SQL query
 gryt db metric <name> --gen <version>        # Get metric
