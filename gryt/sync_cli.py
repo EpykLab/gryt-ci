@@ -17,6 +17,20 @@ console = Console()
 
 def _get_sync_client() -> CloudSync:
     """Get configured CloudSync client."""
+    from .paths import get_repo_db_path, ensure_in_repo
+    from .data import SqliteData
+
+    # Ensure we're in a repo
+    ensure_in_repo()
+
+    # Get database
+    db_path = get_repo_db_path()
+    if not db_path or not db_path.exists():
+        raise RuntimeError(f"Database not found at {db_path}. Run 'gryt init' first.")
+
+    data = SqliteData(db_path=str(db_path))
+
+    # Get cloud client
     config = Config.load_with_repo_context()
     client = GrytCloudClient(
         username=config.username,
@@ -25,7 +39,8 @@ def _get_sync_client() -> CloudSync:
         api_key_id=config.api_key_id,
         api_key_secret=config.api_key_secret,
     )
-    return CloudSync(client=client)
+
+    return CloudSync(data=data, client=client)
 
 
 @sync_app.command("pull")
@@ -57,7 +72,7 @@ def pull_command(
                 console.print(f"  [dim]•[/dim] {detail}")
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}", err=True)
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
 
@@ -99,7 +114,7 @@ def push_command(
                 console.print(f"  [dim]•[/dim] {detail}")
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}", err=True)
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
 
@@ -154,7 +169,7 @@ def status_command(
                 console.print(table)
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}", err=True)
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
 
@@ -174,7 +189,7 @@ def config_command(
 
         if mode:
             if mode not in ("local", "cloud", "hybrid"):
-                console.print("[red]Invalid mode. Must be: local, cloud, or hybrid[/red]", err=True)
+                console.print("[red]Invalid mode. Must be: local, cloud, or hybrid[/red]")
                 raise typer.Exit(1)
 
             config.execution_mode = mode
@@ -188,5 +203,5 @@ def config_command(
             console.print(f"  Authenticated: {'yes' if config.username or config.api_key_id else 'no'}")
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}", err=True)
+        console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
