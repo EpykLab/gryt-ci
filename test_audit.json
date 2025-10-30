@@ -1,0 +1,56 @@
+{
+  "exported_at": "2025-10-30T13:51:04.512200",
+  "generations": [
+    {
+      "generation_id": "f4528001-1d9e-484a-a44a-016214887eec",
+      "version": "v2.3.0",
+      "description": "Release v2.3.0",
+      "status": "draft",
+      "pipeline_template": null,
+      "created_at": "2025-10-29 15:37:09.273221",
+      "promoted_at": null,
+      "sync_status": "not_synced",
+      "remote_id": null,
+      "last_synced_at": null,
+      "created_by": null,
+      "promoted_by": null,
+      "evolution_count": 1,
+      "passed_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "evolutions": [
+    {
+      "evolution_id": "ad5e46c1-eab7-4034-ac3f-2bae052e8f38",
+      "generation_id": "f4528001-1d9e-484a-a44a-016214887eec",
+      "change_id": "CHANGE-F6F8980A",
+      "tag": "v2.3.0-rc.1",
+      "status": "pending",
+      "pipeline_run_id": null,
+      "started_at": "2025-10-30 11:56:09.045301",
+      "completed_at": null,
+      "sync_status": "not_synced",
+      "remote_id": null,
+      "last_synced_at": null,
+      "created_by": "dh1689",
+      "change_type": "add",
+      "change_title": "Placeholder change - edit YAML to customize"
+    }
+  ],
+  "pipeline_runs": [],
+  "audit_events": [],
+  "statistics": {
+    "generations": {
+      "total": 1,
+      "promoted": 0,
+      "draft": 1
+    },
+    "evolutions": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "pending": 1,
+      "pass_rate": 0.0
+    }
+  }
+}

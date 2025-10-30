@@ -1,6 +1,6 @@
 [project]
 name = "gryt"
-version = "0.1.0"
+dynamic = ["version"]
 description = "gryt: Minimal MVP Python CI framework primitives (Data, Step, Runner, Pipeline, Runtime, Versioning)"
 requires-python = ">=3.8"
 dependencies = [
@@ -47,3 +47,6 @@ env = [
     "FLY_API_KEY = dummy_key_for_unit_tests",
     "TEST_MODE = unit"
 ]
+
+[tool.setuptools.dynamic]
+version = {file = ["VERSION"]}
