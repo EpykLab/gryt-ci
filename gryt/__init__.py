@@ -29,6 +29,12 @@ from .generation import Generation, GenerationChange
 from .evolution import Evolution
 from .policy import Policy, PolicySet, PolicyViolation
 from .gates import PromotionGate, GateResult, AllChangesProvenGate, NoFailedEvolutionsGate, MinEvolutionsGate
+from .templates import Template, TemplateRegistry, get_template_registry
+from .dashboard import Dashboard, run_dashboard
+from .audit import AuditTrail, export_audit_trail
+from .rollback import RollbackManager
+from .hotfix import HotfixWorkflow, HotfixGate, create_hotfix
+from .compliance import ComplianceReport, generate_compliance_report
 from .steps import (
     GoModDownloadStep,
     GoBuildStep,
@@ -90,7 +96,7 @@ __all__ = [
     "ScytheValidator",
     # Generations & Evolutions (v0.2.0, v0.3.0)
     "Generation",
-    "Change",
+    "GenerationChange",
     "Evolution",
     # Policies (v0.5.0)
     "Policy",
@@ -102,4 +108,19 @@ __all__ = [
     "AllChangesProvenGate",
     "NoFailedEvolutionsGate",
     "MinEvolutionsGate",
+    # Templates & Dashboard (v0.6.0)
+    "Template",
+    "TemplateRegistry",
+    "get_template_registry",
+    "Dashboard",
+    "run_dashboard",
+    # Audit, Rollback & Compliance (v1.0.0)
+    "AuditTrail",
+    "export_audit_trail",
+    "RollbackManager",
+    "HotfixWorkflow",
+    "HotfixGate",
+    "create_hotfix",
+    "ComplianceReport",
+    "generate_compliance_report",
 ]

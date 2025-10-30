@@ -15,6 +15,9 @@ from . import Pipeline, Runner, CommandStep, SqliteData, LocalRuntime
 from .cloud import cloud_app
 from .generation_cli import generation_app
 from .evolution_cli import evolution_app
+from .new_cli import new_app
+from .audit_cli import audit_app
+from .dashboard_cli import dashboard_command
 from .config import Config
 
 
@@ -27,9 +30,11 @@ CONFIG_FILENAME = "config"
 app = typer.Typer(name="gryt", help="Gryt CLI: run and manage gryt pipelines.", no_args_is_help=True)
 
 # Register subcommands
+app.add_typer(new_app, name="new")
 app.add_typer(cloud_app, name="cloud")
 app.add_typer(generation_app, name="generation")
 app.add_typer(evolution_app, name="evolution")
+app.add_typer(audit_app, name="audit")
 
 
 def _load_module_from_path(path: Path) -> ModuleType:
@@ -585,6 +590,40 @@ def config_command(
     else:
         code = cmd_config_get(key)
     raise typer.Exit(code)
+
+
+# Register dashboard command (v0.6.0)
+app.command("dashboard", help="Launch the interactive TUI dashboard")(dashboard_command)
+
+
+# Compliance report command (v1.0.0)
+@app.command("compliance", help="Generate NIST 800-161 compliance report")
+def compliance_command(
+    output: str = typer.Option("compliance-report.html", "--output", "-o", help="Output HTML file"),
+):
+    """Generate NIST 800-161 compliance report"""
+    from .compliance import generate_compliance_report
+
+    try:
+        db_path = Path.cwd() / GRYT_DIRNAME / DEFAULT_DB_RELATIVE
+        if not db_path.exists():
+            typer.echo(
+                f"Error: Database not found at {db_path}. Run 'gryt init' first.",
+                err=True,
+            )
+            raise typer.Exit(2)
+
+        output_path = Path(output)
+        typer.echo("Generating NIST 800-161 compliance report...")
+
+        generate_compliance_report(db_path, output_path)
+
+        typer.echo(f"✓ Compliance report generated: {output_path}")
+        typer.echo(f"\nOpen in browser: file://{output_path.absolute()}")
+
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(2)
 
 
 def main(argv: list[str] | None = None) -> int:

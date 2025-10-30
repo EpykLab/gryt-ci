@@ -277,15 +277,33 @@ gryt generation promote v1.0.0
 | SlackDestination for notifications | ✅ Done |
 | PrometheusDestination for metrics | ✅ Done |
 | Alerts configuration (thresholds in schema) | ✅ Done |
+| **v0.6.0**: Templates & UX | ✅ Done |
+| Template system & registry | ✅ Done |
+| Built-in templates (go, python, node, minimal) | ✅ Done |
+| `gryt new` command with template support | ✅ Done |
+| `gryt dashboard` TUI with Rich | ✅ Done |
+| Real-time monitoring (generations, evolutions, stats) | ✅ Done |
+| **v1.0.0**: Secure Evolvability Certified | ✅ Done |
+| Audit trail export (JSON, CSV, HTML) | ✅ Done |
+| Database snapshot & rollback system | ✅ Done |
+| Hot-fix generation workflow | ✅ Done |
+| NIST 800-161 compliance report generator | ✅ Done |
+| `gryt audit` command suite | ✅ Done |
+| `gryt compliance` report generation | ✅ Done |
 
 ---
 
-## Roadmap: Remaining Milestones
+## Roadmap: Complete! 🎉
 
-| Milestone | Features | Target |
-|---------|----------|--------|
-| **v0.6.0** – *Templates & UX* | `gryt new --template go-release`<br>`gryt dashboard` (TUI)<br>Web UI (optional) | Q2 2026 |
-| **v1.0.0** – *Secure Evolvability Certified* | NIST 800-161 audit report<br>Full audit trail export<br>Rollback via DB<br>Hot-fix Generation workflow | Q3 2026 |
+All planned milestones have been implemented:
+- ✅ v0.2.0 – Generation Contracts
+- ✅ v0.3.0 – Evolution Engine
+- ✅ v0.4.0 – Promotion Gates
+- ✅ v0.5.0 – Policy & Hooks++
+- ✅ v0.6.0 – Templates & UX
+- ✅ v1.0.0 – Secure Evolvability Certified
+
+**gryt-ci v1.0.0 is production-ready!**
 
 ---
 
@@ -298,8 +316,8 @@ gryt generation promote v1.0.0
 | **Change Types** | ✅ YAML + DB | Done (v0.2.0) |
 | **Promotion gate** | ✅ Pluggable gates | Done (v0.4.0) |
 | **Policy hooks** | ✅ YAML + Hooks + Alerts | Done (v0.5.0) |
-| **Hot-fix path** | ❌ None | Add (v1.0.0) |
-| **Audit export** | ⚠️ Raw DB | Export CLI (v1.0.0) |
+| **Hot-fix path** | ✅ Fast-track workflow | Done (v1.0.0) |
+| **Audit export** | ✅ JSON/CSV/HTML export | Done (v1.0.0) |
 
 ---
 
@@ -309,7 +327,7 @@ gryt generation promote v1.0.0
 2. ✅ **Evolution engine** – RC tagging, Git tags (v0.3.0)
 3. ✅ **Promotion gates** – 100% PASS validation (v0.4.0)
 4. ✅ **Policy system** – Change-type hooks, alerts (v0.5.0)
-5. 📋 **TUI dashboard** – Interactive UI (v0.6.0)
+5. ✅ **TUI dashboard** – Interactive UI, templates (v0.6.0)
 6. 📋 **NIST compliance** – Audit export (v1.0.0)
 
 ---

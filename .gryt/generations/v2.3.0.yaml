@@ -1,0 +1,7 @@
+version: v2.3.0
+description: Release v2.3.0
+changes:
+- id: CHANGE-F6F8980A
+  type: add
+  title: Placeholder change - edit YAML to customize
+  description: null
