@@ -63,7 +63,7 @@ def cmd_team_list() -> int:
         client = _get_cloud_client()
         result = client.list_teams()
 
-        teams = result.get("teams", [])
+        teams = result.get("data", [])
         if not teams:
             typer.echo("No teams found. Create one with 'gryt team create <name>'")
             return 0
@@ -72,7 +72,7 @@ def cmd_team_list() -> int:
         typer.echo(f"{'Name':<30} {'Team ID':<40} {'Members':<10}")
         typer.echo("-" * 85)
 
-        for team in teams:
+        for team in teams["teams"]:
             name = team.get("name", "?")
             team_id = team.get("team_id", "?")
             member_count = team.get("member_count", 0)
@@ -91,7 +91,7 @@ def cmd_team_members(team_id: str) -> int:
         client = _get_cloud_client()
         result = client.list_team_members(team_id)
 
-        members = result.get("members", [])
+        members = result.get("data", [])
         if not members:
             typer.echo(f"No members in team {team_id}")
             typer.echo(f"Add members with: gryt team add-member {team_id} <username>")
@@ -101,7 +101,7 @@ def cmd_team_members(team_id: str) -> int:
         typer.echo(f"{'Username':<30} {'Role':<15} {'Added':<20}")
         typer.echo("-" * 70)
 
-        for member in members:
+        for member in members["members"]:
             username = member.get("username", "?")
             role = member.get("role", "member")
             added_at = member.get("added_at", "?")
