@@ -18,6 +18,7 @@ from .evolution_cli import evolution_app
 from .new_cli import new_app
 from .audit_cli import audit_app
 from .sync_cli import sync_app
+from .team_cli import team_app
 from .dashboard_cli import dashboard_command
 from .config import Config
 
@@ -37,6 +38,7 @@ app.add_typer(generation_app, name="generation")
 app.add_typer(evolution_app, name="evolution")
 app.add_typer(audit_app, name="audit")
 app.add_typer(sync_app, name="sync")
+app.add_typer(team_app, name="team")
 
 
 def _load_module_from_path(path: Path) -> ModuleType:

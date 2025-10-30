@@ -102,6 +102,11 @@ def cmd_evolution_start(
                 data.close()
                 return 2
 
+        # Get current user from config
+        from .config import Config
+        config = Config.load_with_repo_context()
+        current_user = config.username or "local"
+
         # Start evolution (will auto-generate RC tag and create git tag)
         from .paths import find_repo_root
         repo_root = find_repo_root()
@@ -112,6 +117,7 @@ def cmd_evolution_start(
             change_id=change_id,
             auto_tag=not no_tag,
             repo_path=repo_root or Path.cwd(),
+            created_by=current_user,
         )
 
         data.close()

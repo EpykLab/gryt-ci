@@ -201,12 +201,29 @@ class SqliteData(Data):
                     pipeline_template TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     promoted_at DATETIME,
+                    created_by TEXT,
+                    promoted_by TEXT,
                     sync_status TEXT DEFAULT 'not_synced',
                     remote_id TEXT,
                     last_synced_at DATETIME
                 )
                 """
             )
+            # Migrate: Add user tracking fields if missing (v1.0.0)
+            gen_info = self.conn.execute("PRAGMA table_info(generations)").fetchall()
+            gen_cols = {row[1] if isinstance(row, tuple) else row["name"]: row for row in gen_info}
+            if "created_by" not in gen_cols:
+                self.conn.execute("ALTER TABLE generations ADD COLUMN created_by TEXT")
+                try:
+                    getattr(self, "_last_migrations_applied", []).append("add generations.created_by column")
+                except Exception:
+                    pass
+            if "promoted_by" not in gen_cols:
+                self.conn.execute("ALTER TABLE generations ADD COLUMN promoted_by TEXT")
+                try:
+                    getattr(self, "_last_migrations_applied", []).append("add generations.promoted_by column")
+                except Exception:
+                    pass
             # generation_changes (v0.2.0)
             self.conn.execute(
                 """
@@ -234,6 +251,7 @@ class SqliteData(Data):
                     pipeline_run_id TEXT,
                     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     completed_at DATETIME,
+                    created_by TEXT,
                     sync_status TEXT DEFAULT 'not_synced',
                     remote_id TEXT,
                     last_synced_at DATETIME,
@@ -243,6 +261,15 @@ class SqliteData(Data):
                 )
                 """
             )
+            # Migrate: Add user tracking field if missing (v1.0.0)
+            evo_info = self.conn.execute("PRAGMA table_info(evolutions)").fetchall()
+            evo_cols = {row[1] if isinstance(row, tuple) else row["name"]: row for row in evo_info}
+            if "created_by" not in evo_cols:
+                self.conn.execute("ALTER TABLE evolutions ADD COLUMN created_by TEXT")
+                try:
+                    getattr(self, "_last_migrations_applied", []).append("add evolutions.created_by column")
+                except Exception:
+                    pass
             # sync_metadata (v1.0.0 - distributed sync)
             self.conn.execute(
                 """

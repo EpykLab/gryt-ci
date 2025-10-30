@@ -408,6 +408,8 @@ class CloudSync:
             "pipeline_template": cloud_gen.get("pipeline_template"),
             "created_at": cloud_gen.get("created_at"),
             "promoted_at": cloud_gen.get("promoted_at"),
+            "created_by": cloud_gen.get("created_by"),
+            "promoted_by": cloud_gen.get("promoted_by"),
             "sync_status": "synced",
             "remote_id": cloud_gen["id"],
             "last_synced_at": datetime.now()
@@ -436,6 +438,8 @@ class CloudSync:
                 "status": cloud_gen.get("status", "draft"),
                 "pipeline_template": cloud_gen.get("pipeline_template"),
                 "promoted_at": cloud_gen.get("promoted_at"),
+                "created_by": cloud_gen.get("created_by"),
+                "promoted_by": cloud_gen.get("promoted_by"),
                 "sync_status": "synced",
                 "last_synced_at": datetime.now()
             },

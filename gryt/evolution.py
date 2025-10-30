@@ -47,6 +47,7 @@ class Evolution:
         completed_at: Optional[datetime] = None,
         sync_status: str = "not_synced",
         remote_id: Optional[str] = None,
+        created_by: Optional[str] = None,
     ):
         self.evolution_id = evolution_id or str(uuid.uuid4())
         self.generation_id = generation_id
@@ -58,6 +59,7 @@ class Evolution:
         self.completed_at = completed_at
         self.sync_status = sync_status
         self.remote_id = remote_id
+        self.created_by = created_by
 
     @classmethod
     def from_db(cls, data: SqliteData, evolution_id: str) -> Optional[Evolution]:
@@ -80,6 +82,7 @@ class Evolution:
             completed_at=row.get("completed_at"),
             sync_status=row.get("sync_status", "not_synced"),
             remote_id=row.get("remote_id"),
+            created_by=row.get("created_by"),
         )
 
     def save_to_db(self, data: SqliteData, emit_event: bool = True) -> None:
@@ -102,6 +105,7 @@ class Evolution:
             "completed_at": self.completed_at,
             "sync_status": self.sync_status,
             "remote_id": self.remote_id,
+            "created_by": self.created_by,
         }
 
         if existing:
@@ -140,6 +144,7 @@ class Evolution:
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "sync_status": self.sync_status,
             "remote_id": self.remote_id,
+            "created_by": self.created_by,
         }
 
     def create_git_tag(self, repo_path: Optional[Path] = None) -> bool:
@@ -217,6 +222,7 @@ class Evolution:
         change_id: str,
         auto_tag: bool = True,
         repo_path: Optional[Path] = None,
+        created_by: Optional[str] = None,
     ) -> Evolution:
         """
         Start a new evolution for a generation change.
@@ -259,6 +265,7 @@ class Evolution:
             change_id=change_id,
             tag=tag,
             status="pending",
+            created_by=created_by,
         )
 
         evolution.save_to_db(data)

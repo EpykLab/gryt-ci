@@ -288,6 +288,45 @@ class GrytCloudClient:
         """Delete an evolution."""
         return self._request("DELETE", f"/api/v1/evolutions/{evolution_id}")
 
+    # Teams (v1.0.0)
+    def create_team(self, name: str, description: Optional[str] = None) -> dict[str, Any]:
+        """Create a new team."""
+        payload = {"name": name}
+        if description:
+            payload["description"] = description
+        return self._request("POST", "/api/v1/teams", json=payload)
+
+    def list_teams(self) -> dict[str, Any]:
+        """List all teams the user belongs to or owns."""
+        return self._request("GET", "/api/v1/teams")
+
+    def get_team(self, team_id: str) -> dict[str, Any]:
+        """Get a specific team."""
+        return self._request("GET", f"/api/v1/teams/{team_id}")
+
+    def delete_team(self, team_id: str) -> dict[str, Any]:
+        """Delete a team."""
+        return self._request("DELETE", f"/api/v1/teams/{team_id}")
+
+    def add_team_member(self, team_id: str, username: str) -> dict[str, Any]:
+        """Add a member to a team."""
+        return self._request(
+            "POST",
+            f"/api/v1/teams/{team_id}/members",
+            json={"username": username}
+        )
+
+    def remove_team_member(self, team_id: str, username: str) -> dict[str, Any]:
+        """Remove a member from a team."""
+        return self._request(
+            "DELETE",
+            f"/api/v1/teams/{team_id}/members/{username}"
+        )
+
+    def list_team_members(self, team_id: str) -> dict[str, Any]:
+        """List all members of a team."""
+        return self._request("GET", f"/api/v1/teams/{team_id}/members")
+
     # Apply
     def apply(self, yaml_content: str) -> dict[str, Any]:
         """Apply a YAML configuration."""

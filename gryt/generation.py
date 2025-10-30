@@ -79,6 +79,8 @@ class Generation:
         remote_id: Optional[str] = None,
         created_at: Optional[datetime] = None,
         promoted_at: Optional[datetime] = None,
+        created_by: Optional[str] = None,
+        promoted_by: Optional[str] = None,
     ):
         self.generation_id = generation_id or str(uuid.uuid4())
         self.version = version if version.startswith("v") else f"v{version}"
@@ -87,6 +89,8 @@ class Generation:
         self.pipeline_template = pipeline_template
         self.status = status
         self.sync_status = sync_status
+        self.created_by = created_by
+        self.promoted_by = promoted_by
         self.remote_id = remote_id
         self.created_at = created_at or datetime.now()
         self.promoted_at = promoted_at
@@ -161,6 +165,8 @@ class Generation:
             remote_id=row.get("remote_id"),
             created_at=created_at,
             promoted_at=promoted_at,
+            created_by=row.get("created_by"),
+            promoted_by=row.get("promoted_by"),
         )
 
     def save_to_db(self, data: SqliteData, emit_event: bool = True) -> None:
@@ -182,6 +188,8 @@ class Generation:
             "sync_status": self.sync_status,
             "remote_id": self.remote_id,
             "promoted_at": self.promoted_at,
+            "created_by": self.created_by,
+            "promoted_by": self.promoted_by,
         }
 
         if existing:
@@ -329,6 +337,15 @@ class Generation:
         # All gates passed - promote!
         self.status = "promoted"
         self.promoted_at = datetime.now()
+
+        # Set promoted_by from config
+        try:
+            from .config import Config
+            config = Config.load_with_repo_context()
+            self.promoted_by = config.username or "unknown"
+        except:
+            self.promoted_by = "unknown"
+
         self.save_to_db(data, emit_event=False)  # Don't emit yet
 
         # Create final version tag

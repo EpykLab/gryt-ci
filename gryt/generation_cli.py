@@ -84,6 +84,11 @@ def cmd_generation_new(
             data.close()
             return 2
 
+        # Get current user from config
+        from .config import Config
+        config = Config.load_with_repo_context()
+        current_user = config.username or "local"
+
         # Create generation with placeholder change
         changes = [
             GenerationChange(
@@ -98,6 +103,7 @@ def cmd_generation_new(
             description=description or f"Release {version}",
             changes=changes,
             pipeline_template=pipeline_template,
+            created_by=current_user,
         )
 
         # Save to database
