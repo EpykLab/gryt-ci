@@ -47,6 +47,3 @@ env = [
     "FLY_API_KEY = dummy_key_for_unit_tests",
     "TEST_MODE = unit"
 ]
-
-[tool.setuptools.dynamic]
-version = {file = ["VERSION"]}
