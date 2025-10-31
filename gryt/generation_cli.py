@@ -297,6 +297,7 @@ def cmd_generation_gen_test(
     version: str,
     change_id: Optional[str] = None,
     all_changes: bool = False,
+    force: bool = False,
 ) -> int:
     """Generate test pipeline files for changes in a generation"""
     try:
@@ -358,7 +359,8 @@ def cmd_generation_gen_test(
 
         for change in changes_to_process:
             # Check if pipeline already exists
-            if change.pipeline:
+            is_regenerating = bool(change.pipeline)
+            if change.pipeline and not force:
                 typer.echo(f"⚠ Change {change.change_id} already has pipeline: {change.pipeline}")
                 continue
 
@@ -391,7 +393,8 @@ def cmd_generation_gen_test(
             change.pipeline = pipeline_filename
 
             generated_files.append((change.change_id, pipeline_filename))
-            typer.echo(f"✓ Generated {pipeline_filename} for {change.change_id}")
+            action = "Regenerated" if is_regenerating else "Generated"
+            typer.echo(f"✓ {action} {pipeline_filename} for {change.change_id}")
 
         data.close()
 
@@ -526,6 +529,7 @@ def gen_test_command(
     version: str = typer.Argument(..., help="Version (e.g., v2.2.0)"),
     change: Optional[str] = typer.Option(None, "--change", "-c", help="Generate for specific change ID"),
     all_changes: bool = typer.Option(False, "--all", "-a", help="Generate for all changes"),
+    force: bool = typer.Option(False, "--force", "-f", help="Regenerate pipeline files even if they already exist"),
 ):
-    code = cmd_generation_gen_test(version, change, all_changes)
+    code = cmd_generation_gen_test(version, change, all_changes, force)
     raise typer.Exit(code)

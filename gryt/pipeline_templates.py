@@ -29,16 +29,15 @@ def generate_pipeline_template(
     """
     sanitized_id = sanitize_change_id(change_id)
 
-    # Common imports
-    imports = '''"""
+    # Common header
+    header = '''#!/usr/bin/env python3
+"""
 Validation pipeline for {change_id}: {title}
 
 Change Type: {change_type}
 {description_block}
 """
-from gryt import Pipeline, CommandStep, LocalRuntime, SqliteData
-from pathlib import Path
-
+from gryt import LocalRuntime, Pipeline, Runner, SqliteData, CommandStep
 
 '''.format(
         change_id=change_id,
@@ -59,68 +58,53 @@ from pathlib import Path
     else:
         template = _generate_generic_template(sanitized_id, change_id, title)
 
-    return imports + template
+    return header + template
 
 
 def _generate_add_template(sanitized_id: str, change_id: str, title: str) -> str:
     """Generate template for 'add' change type (new feature)"""
     return f'''# Feature validation pipeline for {change_id}
 # This pipeline validates the new feature: {title}
+#
+# Recommended steps:
+# - Unit tests for new functionality
+# - Integration tests with existing system
+# - End-to-end tests for user workflows
+# - Security scan for new code
+# - Performance benchmarks if applicable
 
-def create_pipeline() -> Pipeline:
-    """
-    Create validation pipeline for new feature.
+data = SqliteData(db_path='.gryt/gryt.db')
+runtime = LocalRuntime()
 
-    Recommended steps:
-    - Unit tests for new functionality
-    - Integration tests with existing system
-    - End-to-end tests for user workflows
-    - Security scan for new code
-    - Performance benchmarks if applicable
-    """
+# TODO: Customize these steps for your specific validation needs
+runner = Runner([
+    CommandStep(
+        id="unit_tests",
+        config={{
+            'cmd': ['pytest', 'tests/test_{sanitized_id.lower()}.py', '-v'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="integration_tests",
+        config={{
+            'cmd': ['pytest', 'tests/integration/test_{sanitized_id.lower()}_integration.py', '-v'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="security_scan",
+        config={{
+            'cmd': ['bandit', '-r', 'src/', '-ll'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+], data=data)
 
-    # Example: Run unit tests for new feature
-    unit_test = CommandStep(
-        name="unit_tests",
-        command="pytest tests/test_{sanitized_id.lower()}.py -v",
-        description="Run unit tests for {title}"
-    )
-
-    # Example: Run integration tests
-    integration_test = CommandStep(
-        name="integration_tests",
-        command="pytest tests/integration/test_{sanitized_id.lower()}_integration.py -v",
-        description="Test integration with existing system"
-    )
-
-    # Example: Security scan
-    security_scan = CommandStep(
-        name="security_scan",
-        command="bandit -r src/ -ll",
-        description="Security scan for new code"
-    )
-
-    pipeline = Pipeline(
-        name="{sanitized_id}_VALIDATION",
-        steps=[unit_test, integration_test, security_scan],
-        parallel_runners=1  # Run sequentially
-    )
-
-    return pipeline
-
-
-if __name__ == "__main__":
-    pipeline = create_pipeline()
-    runtime = LocalRuntime()
-    data = SqliteData(db_path=".gryt/gryt.db")
-
-    result = pipeline.execute(runtime, data)
-
-    if result.get("status") == "pass":
-        print(f"✓ Validation passed for {change_id}")
-    else:
-        print(f"✗ Validation failed for {change_id}")
-        exit(1)
+PIPELINE = Pipeline([runner], data=data, runtime=runtime)
 '''
 
 
@@ -128,60 +112,45 @@ def _generate_fix_template(sanitized_id: str, change_id: str, title: str) -> str
     """Generate template for 'fix' change type (bug fix)"""
     return f'''# Bug fix validation pipeline for {change_id}
 # This pipeline validates the bug fix: {title}
+#
+# Recommended steps:
+# - Regression tests to verify bug is fixed
+# - Unit tests for the fixed code
+# - Integration tests to ensure no new issues
+# - Related feature tests to prevent regressions
 
-def create_pipeline() -> Pipeline:
-    """
-    Create validation pipeline for bug fix.
+data = SqliteData(db_path='.gryt/gryt.db')
+runtime = LocalRuntime()
 
-    Recommended steps:
-    - Regression tests to verify bug is fixed
-    - Unit tests for the fixed code
-    - Integration tests to ensure no new issues
-    - Related feature tests to prevent regressions
-    """
+# TODO: Customize these steps for your specific validation needs
+runner = Runner([
+    CommandStep(
+        id="regression_test",
+        config={{
+            'cmd': ['pytest', 'tests/regression/test_{sanitized_id.lower()}_bug.py', '-v'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="unit_tests",
+        config={{
+            'cmd': ['pytest', 'tests/test_fixed_module.py', '-v'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="full_test_suite",
+        config={{
+            'cmd': ['pytest', 'tests/', '-v', '--tb=short'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+], data=data)
 
-    # Example: Run regression test for the bug
-    regression_test = CommandStep(
-        name="regression_test",
-        command="pytest tests/regression/test_{sanitized_id.lower()}_bug.py -v",
-        description="Verify bug {change_id} is fixed"
-    )
-
-    # Example: Run unit tests for fixed code
-    unit_test = CommandStep(
-        name="unit_tests",
-        command="pytest tests/test_fixed_module.py -v",
-        description="Test fixed code functionality"
-    )
-
-    # Example: Full test suite to catch regressions
-    full_test = CommandStep(
-        name="full_test_suite",
-        command="pytest tests/ -v --tb=short",
-        description="Run full test suite to prevent regressions"
-    )
-
-    pipeline = Pipeline(
-        name="{sanitized_id}_VALIDATION",
-        steps=[regression_test, unit_test, full_test],
-        parallel_runners=1
-    )
-
-    return pipeline
-
-
-if __name__ == "__main__":
-    pipeline = create_pipeline()
-    runtime = LocalRuntime()
-    data = SqliteData(db_path=".gryt/gryt.db")
-
-    result = pipeline.execute(runtime, data)
-
-    if result.get("status") == "pass":
-        print(f"✓ Bug fix validated for {change_id}")
-    else:
-        print(f"✗ Validation failed for {change_id}")
-        exit(1)
+PIPELINE = Pipeline([runner], data=data, runtime=runtime)
 '''
 
 
@@ -189,60 +158,45 @@ def _generate_refine_template(sanitized_id: str, change_id: str, title: str) -> 
     """Generate template for 'refine' change type (improvement)"""
     return f'''# Refinement validation pipeline for {change_id}
 # This pipeline validates the refinement: {title}
+#
+# Recommended steps:
+# - Performance benchmarks (before/after comparison)
+# - Unit tests for refined code
+# - Load tests if applicable
+# - UX tests for user-facing improvements
 
-def create_pipeline() -> Pipeline:
-    """
-    Create validation pipeline for refinement/improvement.
+data = SqliteData(db_path='.gryt/gryt.db')
+runtime = LocalRuntime()
 
-    Recommended steps:
-    - Performance benchmarks (before/after comparison)
-    - Unit tests for refined code
-    - Load tests if applicable
-    - UX tests for user-facing improvements
-    """
+# TODO: Customize these steps for your specific validation needs
+runner = Runner([
+    CommandStep(
+        id="unit_tests",
+        config={{
+            'cmd': ['pytest', 'tests/test_refined_module.py', '-v'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="benchmark",
+        config={{
+            'cmd': ['pytest', 'tests/benchmarks/test_{sanitized_id.lower()}_perf.py', '--benchmark-only'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="load_test",
+        config={{
+            'cmd': ['locust', '-f', 'tests/load/test_{sanitized_id.lower()}_load.py', '--headless', '-u', '100', '-r', '10', '-t', '1m'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+], data=data)
 
-    # Example: Performance benchmark
-    benchmark = CommandStep(
-        name="benchmark",
-        command="pytest tests/benchmarks/test_{sanitized_id.lower()}_perf.py --benchmark-only",
-        description="Run performance benchmarks"
-    )
-
-    # Example: Unit tests
-    unit_test = CommandStep(
-        name="unit_tests",
-        command="pytest tests/test_refined_module.py -v",
-        description="Test refined functionality"
-    )
-
-    # Example: Load test
-    load_test = CommandStep(
-        name="load_test",
-        command="locust -f tests/load/test_{sanitized_id.lower()}_load.py --headless -u 100 -r 10 -t 1m",
-        description="Run load tests"
-    )
-
-    pipeline = Pipeline(
-        name="{sanitized_id}_VALIDATION",
-        steps=[unit_test, benchmark, load_test],
-        parallel_runners=1
-    )
-
-    return pipeline
-
-
-if __name__ == "__main__":
-    pipeline = create_pipeline()
-    runtime = LocalRuntime()
-    data = SqliteData(db_path=".gryt/gryt.db")
-
-    result = pipeline.execute(runtime, data)
-
-    if result.get("status") == "pass":
-        print(f"✓ Refinement validated for {change_id}")
-    else:
-        print(f"✗ Validation failed for {change_id}")
-        exit(1)
+PIPELINE = Pipeline([runner], data=data, runtime=runtime)
 '''
 
 
@@ -250,60 +204,45 @@ def _generate_remove_template(sanitized_id: str, change_id: str, title: str) -> 
     """Generate template for 'remove' change type (deprecation/removal)"""
     return f'''# Removal validation pipeline for {change_id}
 # This pipeline validates the removal/deprecation: {title}
+#
+# Recommended steps:
+# - Verify removed code is no longer referenced
+# - Test migration paths for affected users
+# - Ensure replacement functionality works
+# - Check documentation updates
 
-def create_pipeline() -> Pipeline:
-    """
-    Create validation pipeline for removal/deprecation.
+data = SqliteData(db_path='.gryt/gryt.db')
+runtime = LocalRuntime()
 
-    Recommended steps:
-    - Verify removed code is no longer referenced
-    - Test migration paths for affected users
-    - Ensure replacement functionality works
-    - Check documentation updates
-    """
+# TODO: Customize these steps for your specific validation needs
+runner = Runner([
+    CommandStep(
+        id="check_references",
+        config={{
+            'cmd': ['grep', '-r', '{sanitized_id.lower()}', 'src/'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="replacement_test",
+        config={{
+            'cmd': ['pytest', 'tests/test_replacement_functionality.py', '-v'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="full_test_suite",
+        config={{
+            'cmd': ['pytest', 'tests/', '-v'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+], data=data)
 
-    # Example: Check for orphaned references
-    check_references = CommandStep(
-        name="check_references",
-        command="grep -r '{sanitized_id.lower()}' src/ || true",
-        description="Check for orphaned references"
-    )
-
-    # Example: Test replacement functionality
-    replacement_test = CommandStep(
-        name="replacement_test",
-        command="pytest tests/test_replacement_functionality.py -v",
-        description="Test replacement functionality"
-    )
-
-    # Example: Full test suite
-    full_test = CommandStep(
-        name="full_test_suite",
-        command="pytest tests/ -v",
-        description="Verify no broken dependencies"
-    )
-
-    pipeline = Pipeline(
-        name="{sanitized_id}_VALIDATION",
-        steps=[check_references, replacement_test, full_test],
-        parallel_runners=1
-    )
-
-    return pipeline
-
-
-if __name__ == "__main__":
-    pipeline = create_pipeline()
-    runtime = LocalRuntime()
-    data = SqliteData(db_path=".gryt/gryt.db")
-
-    result = pipeline.execute(runtime, data)
-
-    if result.get("status") == "pass":
-        print(f"✓ Removal validated for {change_id}")
-    else:
-        print(f"✗ Validation failed for {change_id}")
-        exit(1)
+PIPELINE = Pipeline([runner], data=data, runtime=runtime)
 '''
 
 
@@ -311,47 +250,30 @@ def _generate_generic_template(sanitized_id: str, change_id: str, title: str) ->
     """Generate generic template for unknown change types"""
     return f'''# Validation pipeline for {change_id}
 # This pipeline validates: {title}
+#
+# TODO: Customize this pipeline based on your specific needs
 
-def create_pipeline() -> Pipeline:
-    """
-    Create validation pipeline.
+data = SqliteData(db_path='.gryt/gryt.db')
+runtime = LocalRuntime()
 
-    TODO: Customize this pipeline based on your specific needs.
-    """
+runner = Runner([
+    CommandStep(
+        id="tests",
+        config={{
+            'cmd': ['pytest', 'tests/', '-v'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+    CommandStep(
+        id="lint",
+        config={{
+            'cmd': ['pylint', 'src/'],
+            'cwd': '.',
+        }},
+        data=data
+    ),
+], data=data)
 
-    # Example: Run tests
-    test_step = CommandStep(
-        name="tests",
-        command="pytest tests/ -v",
-        description="Run tests"
-    )
-
-    # Example: Run linting
-    lint_step = CommandStep(
-        name="lint",
-        command="pylint src/",
-        description="Run code quality checks"
-    )
-
-    pipeline = Pipeline(
-        name="{sanitized_id}_VALIDATION",
-        steps=[test_step, lint_step],
-        parallel_runners=1
-    )
-
-    return pipeline
-
-
-if __name__ == "__main__":
-    pipeline = create_pipeline()
-    runtime = LocalRuntime()
-    data = SqliteData(db_path=".gryt/gryt.db")
-
-    result = pipeline.execute(runtime, data)
-
-    if result.get("status") == "pass":
-        print(f"✓ Validation passed for {change_id}")
-    else:
-        print(f"✗ Validation failed for {change_id}")
-        exit(1)
+PIPELINE = Pipeline([runner], data=data, runtime=runtime)
 '''
