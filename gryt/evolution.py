@@ -71,6 +71,22 @@ class Evolution:
             return None
 
         row = rows[0]
+
+        # Parse datetime strings from DB
+        started_at = row.get("started_at")
+        if started_at and isinstance(started_at, str):
+            try:
+                started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                started_at = None
+
+        completed_at = row.get("completed_at")
+        if completed_at and isinstance(completed_at, str):
+            try:
+                completed_at = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                completed_at = None
+
         return cls(
             evolution_id=row["evolution_id"],
             generation_id=row["generation_id"],
@@ -78,8 +94,8 @@ class Evolution:
             tag=row["tag"],
             status=row["status"],
             pipeline_run_id=row.get("pipeline_run_id"),
-            started_at=row.get("started_at"),
-            completed_at=row.get("completed_at"),
+            started_at=started_at,
+            completed_at=completed_at,
             sync_status=row.get("sync_status", "not_synced"),
             remote_id=row.get("remote_id"),
             created_by=row.get("created_by"),
