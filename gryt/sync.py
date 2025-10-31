@@ -43,7 +43,14 @@ class CloudSync:
         try:
             # Fetch all cloud generations
             cloud_response = self.client.list_generations()
-            cloud_gens = cloud_response.get("generations", [])
+
+            # Handle nested response structure: response["data"]["generations"]
+            if "data" in cloud_response and "generations" in cloud_response["data"]:
+                cloud_gens = cloud_response["data"]["generations"]
+            elif "generations" in cloud_response:
+                cloud_gens = cloud_response["generations"]
+            else:
+                cloud_gens = []
 
             for cloud_gen in cloud_gens:
                 remote_id = cloud_gen["id"]
@@ -142,31 +149,85 @@ class CloudSync:
                     )
                     result["updated"] += 1
                 else:
-                    # Check if version exists in cloud
-                    conflict = self._check_version_conflict(gen.version)
-                    if conflict:
-                        result["errors"].append({
-                            "version": gen.version,
-                            "error": f"Version {gen.version} already exists in cloud",
-                            "resolution": "Use different version or pull to sync"
-                        })
-                        continue
+                    # No remote_id - check if version exists in cloud
+                    logger.info(f"Generation {gen.version} has no remote_id, checking if it exists in cloud...")
+                    existing_cloud_gen = None
+                    try:
+                        existing_cloud_gen = self.client.get_generation_by_version(gen.version)
+                        logger.info(f"Found {gen.version} in cloud with id={existing_cloud_gen.get('id')}")
+                    except Exception as lookup_error:
+                        # Not found in cloud, we'll try to create below
+                        logger.info(f"Generation {gen.version} not found in cloud: {lookup_error}")
 
-                    # Create new
-                    cloud_result = self.client.create_generation(gen.to_dict())
+                    if existing_cloud_gen:
+                        # Version exists in cloud - link local to cloud and update
+                        cloud_id = existing_cloud_gen["id"]
 
-                    # Save remote_id to local
-                    self.data.update(
-                        "generations",
-                        {
-                            "remote_id": cloud_result["id"],
-                            "sync_status": "synced",
-                            "last_synced_at": datetime.now()
-                        },
-                        "generation_id = ?",
-                        (gen.generation_id,)
-                    )
-                    result["created"] += 1
+                        # Save remote_id to local
+                        self.data.update(
+                            "generations",
+                            {
+                                "remote_id": cloud_id,
+                                "sync_status": "synced",
+                                "last_synced_at": datetime.now()
+                            },
+                            "generation_id = ?",
+                            (gen.generation_id,)
+                        )
+
+                        # Update cloud with latest local state
+                        try:
+                            self.client.update_generation(cloud_id, gen.to_dict())
+                            result["updated"] += 1
+                            logger.info(f"Linked and updated existing cloud generation {gen.version}")
+                        except Exception as update_error:
+                            result["errors"].append({
+                                "version": gen.version,
+                                "error": f"Failed to update cloud generation: {update_error}"
+                            })
+                            logger.error(f"Failed to update {gen.version}: {update_error}")
+                            continue
+                    else:
+                        # Version doesn't exist in cloud - create new
+                        try:
+                            cloud_result = self.client.create_generation(gen.to_dict())
+
+                            # Extract ID from nested response structure
+                            if "data" in cloud_result and "id" in cloud_result["data"]:
+                                cloud_id = cloud_result["data"]["id"]
+                            elif "id" in cloud_result:
+                                cloud_id = cloud_result["id"]
+                            else:
+                                raise ValueError(f"API response missing 'id' field: {cloud_result}")
+
+                            # Save remote_id to local
+                            self.data.update(
+                                "generations",
+                                {
+                                    "remote_id": cloud_id,
+                                    "sync_status": "synced",
+                                    "last_synced_at": datetime.now()
+                                },
+                                "generation_id = ?",
+                                (gen.generation_id,)
+                            )
+                            result["created"] += 1
+                            logger.info(f"Created new cloud generation {gen.version}")
+                        except Exception as create_error:
+                            # Check if error is because it already exists
+                            error_str = str(create_error)
+                            if "already exists" in error_str.lower():
+                                result["errors"].append({
+                                    "version": gen.version,
+                                    "error": f"API error: {create_error}. Run 'gryt sync pull' first to link local and cloud versions."
+                                })
+                            else:
+                                result["errors"].append({
+                                    "version": gen.version,
+                                    "error": f"Failed to create: {create_error}"
+                                })
+                            logger.error(f"Failed to create {gen.version}: {create_error}")
+                            continue
 
                 logger.info(f"Pushed generation {gen.version} to cloud")
 
@@ -410,6 +471,7 @@ class CloudSync:
             "promoted_at": cloud_gen.get("promoted_at"),
             "created_by": cloud_gen.get("created_by"),
             "promoted_by": cloud_gen.get("promoted_by"),
+            "team_id": cloud_gen.get("team_id"),
             "sync_status": "synced",
             "remote_id": cloud_gen["id"],
             "last_synced_at": datetime.now()
@@ -430,6 +492,8 @@ class CloudSync:
 
     def _update_from_cloud(self, local_row: Dict[str, Any], cloud_gen: Dict[str, Any]) -> None:
         """Update local generation with cloud state"""
+        generation_id = local_row["generation_id"]
+
         self.data.update(
             "generations",
             {
@@ -440,14 +504,35 @@ class CloudSync:
                 "promoted_at": cloud_gen.get("promoted_at"),
                 "created_by": cloud_gen.get("created_by"),
                 "promoted_by": cloud_gen.get("promoted_by"),
+                "team_id": cloud_gen.get("team_id"),
                 "sync_status": "synced",
                 "last_synced_at": datetime.now()
             },
             "generation_id = ?",
-            (local_row["generation_id"],)
+            (generation_id,)
         )
 
-        logger.info(f"Updated generation {cloud_gen['version']} from cloud")
+        # Update changes if provided
+        if "changes" in cloud_gen:
+            # Delete existing changes
+            self.data.conn.execute(
+                "DELETE FROM generation_changes WHERE generation_id = ?",
+                (generation_id,)
+            )
+            self.data.conn.commit()
+
+            # Insert changes from cloud
+            for change in cloud_gen.get("changes", []):
+                self.data.insert("generation_changes", {
+                    "change_id": change["id"],
+                    "generation_id": generation_id,
+                    "type": change["type"],
+                    "title": change["title"],
+                    "description": change.get("description"),
+                    "status": change.get("status", "pending")
+                })
+
+        logger.info(f"Updated generation {cloud_gen['version']} from cloud with {len(cloud_gen.get('changes', []))} changes")
 
     def _set_metadata(self, key: str, value: str) -> None:
         """Set sync metadata value"""

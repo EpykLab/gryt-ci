@@ -27,20 +27,25 @@ class GenerationChange:
         title: str,
         description: Optional[str] = None,
         status: str = "pending",
+        pipeline: Optional[str] = None,
     ):
         self.change_id = change_id
         self.type = change_type
         self.title = title
         self.description = description
         self.status = status
+        self.pipeline = pipeline
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "id": self.change_id,
             "type": self.type,
             "title": self.title,
             "description": self.description,
         }
+        if self.pipeline:
+            result["pipeline"] = self.pipeline
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GenerationChange:
@@ -49,6 +54,7 @@ class GenerationChange:
             change_type=data["type"],
             title=data["title"],
             description=data.get("description"),
+            pipeline=data.get("pipeline"),
         )
 
 
@@ -65,6 +71,7 @@ class Generation:
         status: draft|active|promoted|abandoned
         sync_status: not_synced|syncing|synced|conflict
         remote_id: ID in cloud (if synced)
+        team_id: ID of team generation will be linked to
     """
 
     def __init__(
@@ -81,6 +88,7 @@ class Generation:
         promoted_at: Optional[datetime] = None,
         created_by: Optional[str] = None,
         promoted_by: Optional[str] = None,
+        team_id: Optional[str] = None,
     ):
         self.generation_id = generation_id or str(uuid.uuid4())
         self.version = version if version.startswith("v") else f"v{version}"
@@ -91,6 +99,7 @@ class Generation:
         self.sync_status = sync_status
         self.created_by = created_by
         self.promoted_by = promoted_by
+        self.team_id = team_id
         self.remote_id = remote_id
         self.created_at = created_at or datetime.now()
         self.promoted_at = promoted_at
@@ -135,6 +144,7 @@ class Generation:
                 title=c["title"],
                 description=c.get("description"),
                 status=c["status"],
+                pipeline=c.get("pipeline"),
             )
             for c in changes_rows
         ]
@@ -167,6 +177,7 @@ class Generation:
             promoted_at=promoted_at,
             created_by=row.get("created_by"),
             promoted_by=row.get("promoted_by"),
+            team_id=row.get("team_id"),
         )
 
     def save_to_db(self, data: SqliteData, emit_event: bool = True) -> None:
@@ -190,6 +201,7 @@ class Generation:
             "promoted_at": self.promoted_at,
             "created_by": self.created_by,
             "promoted_by": self.promoted_by,
+            "team_id": self.team_id,
         }
 
         if existing:
@@ -214,6 +226,7 @@ class Generation:
                 "title": change.title,
                 "description": change.description,
                 "status": change.status,
+                "pipeline": change.pipeline,
             }
             existing_change = data.query(
                 "SELECT change_id FROM generation_changes WHERE change_id = ?",
@@ -257,6 +270,7 @@ class Generation:
             "remote_id": self.remote_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "promoted_at": self.promoted_at.isoformat() if self.promoted_at else None,
+            "team_id": self.team_id,
         }
 
     @staticmethod

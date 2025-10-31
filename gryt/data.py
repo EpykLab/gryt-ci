@@ -224,6 +224,12 @@ class SqliteData(Data):
                     getattr(self, "_last_migrations_applied", []).append("add generations.promoted_by column")
                 except Exception:
                     pass
+            if "team_id" not in gen_cols:
+                self.conn.execute("ALTER TABLE generations ADD COLUMN team_id TEXT")
+                try:
+                    getattr(self, "_last_migrations_applied", []).append("add generations.team_id column")
+                except Exception:
+                    pass
             # generation_changes (v0.2.0)
             self.conn.execute(
                 """
@@ -239,6 +245,15 @@ class SqliteData(Data):
                 )
                 """
             )
+            # Migrate: Add pipeline field if missing (v1.0.4)
+            changes_info = self.conn.execute("PRAGMA table_info(generation_changes)").fetchall()
+            changes_cols = {row[1] if isinstance(row, tuple) else row["name"]: row for row in changes_info}
+            if "pipeline" not in changes_cols:
+                self.conn.execute("ALTER TABLE generation_changes ADD COLUMN pipeline TEXT")
+                try:
+                    getattr(self, "_last_migrations_applied", []).append("add generation_changes.pipeline column")
+                except Exception:
+                    pass
             # evolutions (v0.3.0)
             self.conn.execute(
                 """

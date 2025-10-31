@@ -236,11 +236,25 @@ class GrytCloudClient:
     # Generations (v0.2.0)
     def create_generation(self, generation_data: dict[str, Any]) -> dict[str, Any]:
         """Create a new generation."""
-        return self._request("POST", "/api/v1/generations", json=generation_data)
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.info(f"create_generation() sending data: version={generation_data.get('version')}")
+
+        response = self._request("POST", "/api/v1/generations", json=generation_data)
+        logger.info(f"create_generation() API response: {response}")
+
+        return response
 
     def list_generations(self) -> dict[str, Any]:
         """List all generations."""
-        return self._request("GET", "/api/v1/generations")
+        import logging
+        logger = logging.getLogger(__name__)
+
+        response = self._request("GET", "/api/v1/generations")
+        logger.info(f"list_generations() API response: {response}")
+
+        return response
 
     def get_generation(self, generation_id: str) -> dict[str, Any]:
         """Get a specific generation."""
@@ -248,6 +262,13 @@ class GrytCloudClient:
 
     def update_generation(self, generation_id: str, generation_data: dict[str, Any]) -> dict[str, Any]:
         """Update a generation."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        changes_count = len(generation_data.get("changes", []))
+        logger.info(f"update_generation(id={generation_id}) sending {changes_count} changes")
+        logger.info(f"  Changes: {[c.get('id') for c in generation_data.get('changes', [])]}")
+
         return self._request("PATCH", f"/api/v1/generations/{generation_id}", json=generation_data)
 
     def delete_generation(self, generation_id: str) -> dict[str, Any]:
@@ -256,10 +277,30 @@ class GrytCloudClient:
 
     def get_generation_by_version(self, version: str) -> dict[str, Any]:
         """Get a generation by version string."""
-        generations = self.list_generations()
-        for gen in generations.get("generations", []):
-            if gen.get("version") == version:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        response = self.list_generations()
+
+        # Handle nested response structure: response["data"]["generations"]
+        if "data" in response and "generations" in response["data"]:
+            all_gens = response["data"]["generations"]
+        elif "generations" in response:
+            all_gens = response["generations"]
+        else:
+            all_gens = []
+
+        logger.info(f"Searching for version '{version}' in {len(all_gens)} cloud generations")
+        for gen in all_gens:
+            gen_version = gen.get("version")
+            logger.info(f"  Comparing '{version}' with cloud generation '{gen_version}'")
+            if gen_version == version:
+                logger.info(f"  Found match! Returning generation with id={gen.get('id')}")
                 return gen
+
+        # Log all versions for debugging
+        all_versions = [g.get("version") for g in all_gens]
+        logger.info(f"Version '{version}' not found. Available versions: {all_versions}")
         raise RuntimeError(f"Generation with version '{version}' not found in cloud")
 
     def promote_generation(self, generation_id: str) -> dict[str, Any]:

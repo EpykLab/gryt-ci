@@ -275,6 +275,107 @@ This will:
 
 ---
 
+## Pipeline Per Change
+
+### Overview
+
+Each change in a generation can have its own dedicated validation pipeline. This creates explicit linkage between changes and the tests that prove them.
+
+### Generate Validation Pipelines
+
+After defining changes in your generation YAML, generate validation pipeline scaffolds:
+
+```bash
+# Generate for all changes
+gryt generation gen-test v2.1.0 --all
+
+# Generate for specific change
+gryt generation gen-test v2.1.0 --change FEAT-101
+```
+
+This creates pipeline files like:
+```
+.gryt/pipelines/
+  v2_1_0_FEAT_101_VALIDATION_PIPELINE.py
+  v2_1_0_BUG_42_VALIDATION_PIPELINE.py
+```
+
+### Pipeline Templates
+
+Generated pipelines are type-specific:
+
+**Add (New Feature)**
+- Unit tests for new functionality
+- Integration tests with existing system
+- End-to-end user workflow tests
+- Security scans
+- Performance benchmarks
+
+**Fix (Bug Fix)**
+- Regression tests to verify bug is fixed
+- Unit tests for fixed code
+- Full test suite to prevent new regressions
+
+**Refine (Improvement)**
+- Performance benchmarks (before/after)
+- Load tests
+- Unit tests for refined code
+- UX validation tests
+
+**Remove (Deprecation)**
+- Check for orphaned references
+- Test replacement functionality
+- Verify no broken dependencies
+
+### Customize Generated Pipelines
+
+Edit generated files to implement actual tests:
+
+```python
+# v2_1_0_FEAT_101_VALIDATION_PIPELINE.py
+
+def create_pipeline() -> Pipeline:
+    unit_test = CommandStep(
+        name="unit_tests",
+        command="pytest tests/test_stripe_connect.py -v",
+        description="Test Stripe Connect integration"
+    )
+
+    integration_test = CommandStep(
+        name="integration_tests",
+        command="pytest tests/integration/test_payment_flow.py -v",
+        description="Test full payment flow"
+    )
+
+    return Pipeline(
+        name="FEAT_101_VALIDATION",
+        steps=[unit_test, integration_test],
+    )
+```
+
+### Link Changes to Pipelines in YAML
+
+You can also manually specify pipelines in the generation YAML:
+
+```yaml
+version: v2.1.0
+description: "Payment integration sprint"
+changes:
+  - type: add
+    id: FEAT-101
+    title: "Stripe Connect support"
+    pipeline: v2_1_0_FEAT_101_VALIDATION_PIPELINE.py
+
+  - type: fix
+    id: BUG-42
+    title: "Timeout on large transactions"
+    pipeline: v2_1_0_BUG_42_VALIDATION_PIPELINE.py
+```
+
+Then run `gryt generation update v2.1.0` to sync to database.
+
+---
+
 ## Hot-fix Workflow
 
 ### 1. Create Hot-fix
@@ -524,6 +625,8 @@ gryt new <project> --template <name>        # Create from template
 # Generations
 gryt generation new <version>                # Create generation contract
 gryt generation update <version>             # Update DB from edited YAML file
+gryt generation gen-test <version> --all     # Generate validation pipelines for all changes
+gryt generation gen-test <version> -c <id>   # Generate validation pipeline for specific change
 gryt generation list                         # List all generations
 gryt generation show <version>               # Show generation details
 gryt generation promote <version>            # Promote to production

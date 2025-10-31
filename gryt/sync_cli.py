@@ -52,6 +52,16 @@ def pull_command(
     Fetches all generations and evolutions from cloud and updates local database.
     Safe operation - will not overwrite local-only work.
     """
+    import logging
+    import os
+
+    # Configure logging if verbose or GRYT_LOG_LEVEL is set
+    log_level = os.getenv("GRYT_LOG_LEVEL", "WARNING" if not verbose else "INFO")
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.WARNING),
+        format='%(name)s: %(message)s'
+    )
+
     try:
         sync = _get_sync_client()
         result = sync.pull()
@@ -87,6 +97,16 @@ def push_command(
     Pushes pending generations to cloud. Use --evolutions to also push completed evolutions.
     Checks for version conflicts before creating.
     """
+    import logging
+    import os
+
+    # Configure logging if verbose or GRYT_LOG_LEVEL is set
+    log_level = os.getenv("GRYT_LOG_LEVEL", "WARNING" if not verbose else "INFO")
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.WARNING),
+        format='%(name)s: %(message)s'
+    )
+
     try:
         sync = _get_sync_client()
 

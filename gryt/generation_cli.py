@@ -14,6 +14,7 @@ import yaml
 
 from .generation import Generation, GenerationChange
 from .data import SqliteData
+from .pipeline_templates import generate_pipeline_template, sanitize_change_id
 
 
 GRYT_DIRNAME = ".gryt"
@@ -68,6 +69,7 @@ def cmd_generation_new(
     version: str,
     description: Optional[str] = None,
     pipeline_template: Optional[str] = None,
+    team: Optional[str] = None,
 ) -> int:
     """Create a new generation contract"""
     try:
@@ -104,6 +106,7 @@ def cmd_generation_new(
             changes=changes,
             pipeline_template=pipeline_template,
             created_by=current_user,
+            team_id=team,
         )
 
         # Save to database
@@ -170,12 +173,13 @@ def cmd_generation_update(version: str) -> int:
         )
         data.conn.commit()
 
-        # Update generation record
+        # Update generation record and mark as modified (needs sync)
         data.update(
             "generations",
             {
                 "description": updated_gen.description,
                 "pipeline_template": updated_gen.pipeline_template,
+                "sync_status": "not_synced",  # Mark as needing sync
             },
             "generation_id = ?",
             (generation_id,)
@@ -192,6 +196,7 @@ def cmd_generation_update(version: str) -> int:
                     "title": change.title,
                     "description": change.description,
                     "status": change.status,
+                    "pipeline": change.pipeline,
                 }
             )
 
@@ -221,14 +226,15 @@ def cmd_generation_list() -> int:
             return 0
 
         typer.echo("Generations:\n")
-        typer.echo(f"{'Version':<15} {'Status':<12} {'Changes':<10} {'Sync':<15} {'Description':<40}")
-        typer.echo("-" * 100)
+        typer.echo(f"{'Version':<15} {'Status':<12} {'Changes':<10} {'Sync':<15} {'Team':<20} {'Description':<30}")
+        typer.echo("-" * 110)
 
         for gen in generations:
             changes_count = len(gen.changes)
-            desc = (gen.description or "")[:37] + "..." if gen.description and len(gen.description) > 40 else (gen.description or "")
+            desc = (gen.description or "")[:27] + "..." if gen.description and len(gen.description) > 30 else (gen.description or "")
+            team_display = (gen.team_id[:17] + "...") if gen.team_id and len(gen.team_id) > 20 else (gen.team_id or "-")
             typer.echo(
-                f"{gen.version:<15} {gen.status:<12} {changes_count:<10} {gen.sync_status:<15} {desc:<40}"
+                f"{gen.version:<15} {gen.status:<12} {changes_count:<10} {gen.sync_status:<15} {team_display:<20} {desc:<30}"
             )
 
         return 0
@@ -284,6 +290,128 @@ def cmd_generation_show(version: str) -> int:
 
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
+        return 2
+
+
+def cmd_generation_gen_test(
+    version: str,
+    change_id: Optional[str] = None,
+    all_changes: bool = False,
+) -> int:
+    """Generate test pipeline files for changes in a generation"""
+    try:
+        # Ensure version starts with 'v'
+        version = version if version.startswith("v") else f"v{version}"
+
+        # Validate arguments
+        if not change_id and not all_changes:
+            typer.echo("Error: Must specify either --change or --all", err=True)
+            return 2
+
+        if change_id and all_changes:
+            typer.echo("Error: Cannot specify both --change and --all", err=True)
+            return 2
+
+        data = _get_db()
+
+        # Find generation by version
+        rows = data.query("SELECT generation_id FROM generations WHERE version = ?", (version,))
+        if not rows:
+            typer.echo(f"Error: Generation {version} not found", err=True)
+            data.close()
+            return 2
+
+        generation = Generation.from_db(data, rows[0]["generation_id"])
+        if not generation:
+            typer.echo(f"Error: Generation {version} not found", err=True)
+            data.close()
+            return 2
+
+        # Get pipelines directory
+        from .paths import get_repo_gryt_dir, ensure_in_repo
+        ensure_in_repo()
+        gryt_dir = get_repo_gryt_dir()
+        if not gryt_dir:
+            typer.echo("Error: Not in a gryt repository", err=True)
+            data.close()
+            return 2
+
+        pipelines_dir = gryt_dir / "pipelines"
+        pipelines_dir.mkdir(parents=True, exist_ok=True)
+
+        # Determine which changes to process
+        changes_to_process = []
+        if all_changes:
+            changes_to_process = generation.changes
+        else:
+            # Find specific change
+            matching_changes = [c for c in generation.changes if c.change_id == change_id]
+            if not matching_changes:
+                typer.echo(f"Error: Change {change_id} not found in generation {version}", err=True)
+                data.close()
+                return 2
+            changes_to_process = matching_changes
+
+        # Generate pipeline files
+        generated_files = []
+        sanitized_version = version.replace(".", "_").replace("-", "_")  # v2.2.0 -> v2_2_0
+
+        for change in changes_to_process:
+            # Check if pipeline already exists
+            if change.pipeline:
+                typer.echo(f"⚠ Change {change.change_id} already has pipeline: {change.pipeline}")
+                continue
+
+            # Generate pipeline filename with version prefix
+            sanitized_id = sanitize_change_id(change.change_id)
+            pipeline_filename = f"{sanitized_version}_{sanitized_id}_VALIDATION_PIPELINE.py"
+            pipeline_path = pipelines_dir / pipeline_filename
+
+            # Generate pipeline content
+            pipeline_content = generate_pipeline_template(
+                change.change_id,
+                change.type,
+                change.title,
+                change.description,
+            )
+
+            # Write pipeline file
+            with open(pipeline_path, "w") as f:
+                f.write(pipeline_content)
+
+            # Update change in database with pipeline link
+            data.update(
+                "generation_changes",
+                {"pipeline": pipeline_filename},
+                "change_id = ?",
+                (change.change_id,),
+            )
+
+            # Update in-memory change object
+            change.pipeline = pipeline_filename
+
+            generated_files.append((change.change_id, pipeline_filename))
+            typer.echo(f"✓ Generated {pipeline_filename} for {change.change_id}")
+
+        data.close()
+
+        if not generated_files:
+            typer.echo("No new pipeline files generated")
+            return 0
+
+        typer.echo(f"\n✓ Generated {len(generated_files)} validation pipeline(s)")
+        typer.echo(f"  Location: {pipelines_dir.relative_to(Path.cwd())}/")
+        typer.echo("\nNext steps:")
+        typer.echo("1. Review and customize the generated pipeline files")
+        typer.echo("2. Implement the test cases")
+        typer.echo(f"3. Run 'gryt evolution start {version} --change <id>' to validate changes")
+
+        return 0
+
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        import traceback
+        traceback.print_exc()
         return 2
 
 
@@ -356,8 +484,9 @@ def new_command(
     version: str = typer.Argument(..., help="Version (e.g., v2.2.0 or 2.2.0)"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Description of the generation"),
     pipeline_template: Optional[str] = typer.Option(None, "--pipeline", "-p", help="Pipeline template to use"),
+    team: Optional[str] = typer.Option(None, "--team", "-t", help="Team ID (for team-based generations)"),
 ):
-    code = cmd_generation_new(version, description, pipeline_template)
+    code = cmd_generation_new(version, description, pipeline_template, team)
     raise typer.Exit(code)
 
 
@@ -389,4 +518,14 @@ def promote_command(
     no_tag: bool = typer.Option(False, "--no-tag", help="Don't create git tag"),
 ):
     code = cmd_generation_promote(version, no_tag)
+    raise typer.Exit(code)
+
+
+@generation_app.command("gen-test", help="Generate validation pipeline files for changes")
+def gen_test_command(
+    version: str = typer.Argument(..., help="Version (e.g., v2.2.0)"),
+    change: Optional[str] = typer.Option(None, "--change", "-c", help="Generate for specific change ID"),
+    all_changes: bool = typer.Option(False, "--all", "-a", help="Generate for all changes"),
+):
+    code = cmd_generation_gen_test(version, change, all_changes)
     raise typer.Exit(code)
