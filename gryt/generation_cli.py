@@ -119,6 +119,89 @@ def cmd_generation_new(
         typer.echo(f"  Database: .gryt/gryt.db")
         typer.echo(f"  YAML: {yaml_path.relative_to(Path.cwd())}")
         typer.echo(f"\nEdit {yaml_path.relative_to(Path.cwd())} to define changes.")
+        typer.echo(f"Then run 'gryt generation update {version}' to sync changes to database.")
+        return 0
+
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        return 2
+
+
+def cmd_generation_update(version: str) -> int:
+    """Update generation in database from YAML file"""
+    try:
+        # Ensure version starts with 'v'
+        version = version if version.startswith("v") else f"v{version}"
+
+        # Get database
+        data = _get_db()
+
+        # Check if version exists
+        existing = data.query("SELECT generation_id FROM generations WHERE version = ?", (version,))
+        if not existing:
+            typer.echo(f"Error: Generation {version} not found in database", err=True)
+            typer.echo(f"Create it first with 'gryt generation new {version}'")
+            data.close()
+            return 2
+
+        generation_id = existing[0]["generation_id"]
+
+        # Find YAML file
+        gen_dir = _get_generations_dir()
+        yaml_path = gen_dir / f"{version}.yaml"
+
+        if not yaml_path.exists():
+            typer.echo(f"Error: YAML file not found at {yaml_path}", err=True)
+            data.close()
+            return 2
+
+        # Load generation from YAML
+        typer.echo(f"Reading changes from {yaml_path.relative_to(Path.cwd())}...")
+        updated_gen = Generation.from_yaml_file(yaml_path)
+
+        # Preserve the original generation_id
+        updated_gen.generation_id = generation_id
+
+        # Update database
+        # First, delete existing changes for this generation
+        data.conn.execute(
+            "DELETE FROM generation_changes WHERE generation_id = ?",
+            (generation_id,)
+        )
+        data.conn.commit()
+
+        # Update generation record
+        data.update(
+            "generations",
+            {
+                "description": updated_gen.description,
+                "pipeline_template": updated_gen.pipeline_template,
+            },
+            "generation_id = ?",
+            (generation_id,)
+        )
+
+        # Insert updated changes
+        for change in updated_gen.changes:
+            data.insert(
+                "generation_changes",
+                {
+                    "generation_id": generation_id,
+                    "change_id": change.change_id,
+                    "type": change.type,
+                    "title": change.title,
+                    "description": change.description,
+                    "status": change.status,
+                }
+            )
+
+        data.close()
+
+        typer.echo(f"✓ Updated generation {version} from YAML")
+        typer.echo(f"  Changes: {len(updated_gen.changes)}")
+        for change in updated_gen.changes:
+            typer.echo(f"    • [{change.type}] {change.change_id}: {change.title}")
+
         return 0
 
     except Exception as e:
@@ -275,6 +358,14 @@ def new_command(
     pipeline_template: Optional[str] = typer.Option(None, "--pipeline", "-p", help="Pipeline template to use"),
 ):
     code = cmd_generation_new(version, description, pipeline_template)
+    raise typer.Exit(code)
+
+
+@generation_app.command("update", help="Update generation in database from edited YAML file")
+def update_command(
+    version: str = typer.Argument(..., help="Version to update (e.g., v2.2.0)"),
+):
+    code = cmd_generation_update(version)
     raise typer.Exit(code)
 
 

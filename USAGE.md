@@ -184,6 +184,12 @@ pipeline = Pipeline(
 gryt generation new v2.1.0
 ```
 
+This creates:
+- Database entry at `.gryt/gryt.db`
+- YAML file at `.gryt/generations/v2.1.0.yaml`
+
+### 2. Edit YAML and Update Database
+
 Edit `.gryt/generations/v2.1.0.yaml`:
 ```yaml
 version: v2.1.0
@@ -198,7 +204,12 @@ changes:
 pipeline_template: release-pipeline
 ```
 
-### 2. Prove First Change
+Sync changes to database:
+```bash
+gryt generation update v2.1.0
+```
+
+### 3. Prove First Change
 
 ```bash
 # Start evolution
@@ -214,7 +225,7 @@ gryt run release-pipeline
 # Pipeline creates v2.1.0-rc.1 tag on success
 ```
 
-### 3. Prove Second Change
+### 4. Prove Second Change
 
 ```bash
 # Start next evolution
@@ -230,7 +241,7 @@ gryt run release-pipeline
 # Creates v2.1.0-rc.2 tag
 ```
 
-### 4. Check Progress
+### 5. Check Progress
 
 ```bash
 gryt evolution list v2.1.0
@@ -250,7 +261,7 @@ Changes:
   BUG-42    Timeout on large transactions proven
 ```
 
-### 5. Promote
+### 6. Promote
 
 ```bash
 gryt generation promote v2.1.0
@@ -512,6 +523,7 @@ gryt new <project> --template <name>        # Create from template
 
 # Generations
 gryt generation new <version>                # Create generation contract
+gryt generation update <version>             # Update DB from edited YAML file
 gryt generation list                         # List all generations
 gryt generation show <version>               # Show generation details
 gryt generation promote <version>            # Promote to production
