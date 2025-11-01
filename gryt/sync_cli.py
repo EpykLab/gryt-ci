@@ -90,11 +90,13 @@ def pull_command(
 def push_command(
     version: Optional[str] = typer.Option(None, "--version", "-v", help="Push specific version"),
     evolutions: bool = typer.Option(False, "--evolutions", "-e", help="Push completed evolutions"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force push even if already synced"),
     verbose: bool = typer.Option(False, "--verbose", help="Show detailed output"),
 ) -> None:
     """Push local changes to cloud.
 
     Pushes pending generations to cloud. Use --evolutions to also push completed evolutions.
+    Use --force to push even if sync_status is 'synced'.
     Checks for version conflicts before creating.
     """
     import logging
@@ -116,7 +118,7 @@ def push_command(
             console.print(f"  Created: {result['created']}")
             console.print(f"  Updated: {result['updated']}")
         else:
-            result = sync.push(version=version)
+            result = sync.push(version=version, force=force)
             console.print(f"[green]Push complete[/green]")
             console.print(f"  Created: {result['created']}")
             console.print(f"  Updated: {result['updated']}")

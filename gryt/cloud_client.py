@@ -240,6 +240,7 @@ class GrytCloudClient:
         logger = logging.getLogger(__name__)
 
         logger.info(f"create_generation() sending data: version={generation_data.get('version')}")
+        logger.info(f"  Changes data: {generation_data.get('changes', [])}")
 
         response = self._request("POST", "/api/v1/generations", json=generation_data)
         logger.info(f"create_generation() API response: {response}")
@@ -263,11 +264,16 @@ class GrytCloudClient:
     def update_generation(self, generation_id: str, generation_data: dict[str, Any]) -> dict[str, Any]:
         """Update a generation."""
         import logging
+        import json
         logger = logging.getLogger(__name__)
 
         changes_count = len(generation_data.get("changes", []))
         logger.info(f"update_generation(id={generation_id}) sending {changes_count} changes")
-        logger.info(f"  Changes: {[c.get('id') for c in generation_data.get('changes', [])]}")
+        for change in generation_data.get("changes", []):
+            logger.info(f"  Change {change.get('id')}: pipeline={change.get('pipeline')}")
+
+        # Debug: Show the actual JSON that will be sent
+        logger.info(f"Full JSON payload: {json.dumps(generation_data, indent=2)}")
 
         return self._request("PATCH", f"/api/v1/generations/{generation_id}", json=generation_data)
 

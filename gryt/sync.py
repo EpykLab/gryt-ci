@@ -52,6 +52,12 @@ class CloudSync:
             else:
                 cloud_gens = []
 
+            logger.info(f"Pulled {len(cloud_gens)} generations from cloud")
+            for cloud_gen in cloud_gens:
+                logger.info(f"  Generation {cloud_gen.get('version')}: {len(cloud_gen.get('changes', []))} changes")
+                for change in cloud_gen.get("changes", []):
+                    logger.info(f"    Change {change['id']}: pipeline={change.get('pipeline')}")
+
             for cloud_gen in cloud_gens:
                 remote_id = cloud_gen["id"]
                 version = cloud_gen["version"]
@@ -96,11 +102,12 @@ class CloudSync:
 
         return result
 
-    def push(self, version: Optional[str] = None) -> Dict[str, Any]:
+    def push(self, version: Optional[str] = None, force: bool = False) -> Dict[str, Any]:
         """Push local changes to cloud
 
         Args:
             version: Specific version to push, or None for all pending
+            force: Force push even if sync_status is 'synced'
 
         Returns:
             dict with keys: created, updated, errors
@@ -125,16 +132,25 @@ class CloudSync:
                 return result
             gens = [Generation.from_db(self.data, rows[0]["generation_id"])]
         else:
-            # All not synced or modified
-            gens = self._get_pending_generations()
+            if force:
+                # Force: push ALL generations
+                gens = Generation.list_all(self.data)
+                logger.info(f"Force push: syncing all {len(gens)} generations")
+            else:
+                # Normal: only push pending
+                gens = self._get_pending_generations()
 
         for gen in gens:
             try:
                 if gen.remote_id:
                     # Update existing
+                    gen_dict = gen.to_dict()
+                    logger.info(f"Syncing {gen.version}: {len(gen.changes)} changes")
+                    for change in gen.changes:
+                        logger.info(f"  Change {change.change_id}: pipeline={change.pipeline}")
                     self.client.update_generation(
                         gen.remote_id,
-                        gen.to_dict()
+                        gen_dict
                     )
 
                     # Update sync status
@@ -190,7 +206,11 @@ class CloudSync:
                     else:
                         # Version doesn't exist in cloud - create new
                         try:
-                            cloud_result = self.client.create_generation(gen.to_dict())
+                            gen_dict = gen.to_dict()
+                            logger.info(f"Creating {gen.version} in cloud: {len(gen.changes)} changes")
+                            for change in gen.changes:
+                                logger.info(f"  Change {change.change_id}: pipeline={change.pipeline}")
+                            cloud_result = self.client.create_generation(gen_dict)
 
                             # Extract ID from nested response structure
                             if "data" in cloud_result and "id" in cloud_result["data"]:
@@ -478,14 +498,17 @@ class CloudSync:
         })
 
         # Insert changes
+        logger.info(f"Inserting {len(cloud_gen.get('changes', []))} changes from cloud")
         for change in cloud_gen.get("changes", []):
+            logger.info(f"  Change {change['id']}: pipeline={change.get('pipeline')}")
             self.data.insert("generation_changes", {
                 "change_id": change["id"],
                 "generation_id": cloud_gen["generation_id"],
                 "type": change["type"],
                 "title": change["title"],
                 "description": change.get("description"),
-                "status": change.get("status", "pending")
+                "status": change.get("status", "pending"),
+                "pipeline": change.get("pipeline")
             })
 
         logger.info(f"Inserted generation {cloud_gen['version']} from cloud")
@@ -522,14 +545,17 @@ class CloudSync:
             self.data.conn.commit()
 
             # Insert changes from cloud
+            logger.info(f"Updating {len(cloud_gen.get('changes', []))} changes from cloud")
             for change in cloud_gen.get("changes", []):
+                logger.info(f"  Change {change['id']}: pipeline={change.get('pipeline')}")
                 self.data.insert("generation_changes", {
                     "change_id": change["id"],
                     "generation_id": generation_id,
                     "type": change["type"],
                     "title": change["title"],
                     "description": change.get("description"),
-                    "status": change.get("status", "pending")
+                    "status": change.get("status", "pending"),
+                    "pipeline": change.get("pipeline")
                 })
 
         logger.info(f"Updated generation {cloud_gen['version']} from cloud with {len(cloud_gen.get('changes', []))} changes")

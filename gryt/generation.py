@@ -37,15 +37,14 @@ class GenerationChange:
         self.pipeline = pipeline
 
     def to_dict(self) -> Dict[str, Any]:
-        result = {
+        return {
             "id": self.change_id,
             "type": self.type,
             "title": self.title,
             "description": self.description,
+            "status": self.status,
+            "pipeline": self.pipeline,  # Always include, even if None
         }
-        if self.pipeline:
-            result["pipeline"] = self.pipeline
-        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GenerationChange:
@@ -54,6 +53,7 @@ class GenerationChange:
             change_type=data["type"],
             title=data["title"],
             description=data.get("description"),
+            status=data.get("status", "pending"),
             pipeline=data.get("pipeline"),
         )
 
@@ -137,6 +137,14 @@ class Generation:
             "SELECT * FROM generation_changes WHERE generation_id = ? ORDER BY created_at",
             (generation_id,),
         )
+
+        # Debug: Log what we're loading from DB
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Loading {len(changes_rows)} changes for generation {generation_id}")
+        for c in changes_rows:
+            logger.info(f"  DB row: change_id={c['change_id']}, pipeline={c.get('pipeline')}")
+
         changes = [
             GenerationChange(
                 change_id=c["change_id"],
@@ -148,6 +156,10 @@ class Generation:
             )
             for c in changes_rows
         ]
+
+        # Debug: Log what GenerationChange objects have
+        for change in changes:
+            logger.info(f"  GenerationChange object: {change.change_id}, pipeline={change.pipeline}")
 
         # Parse datetime strings from DB
         created_at = row.get("created_at")
