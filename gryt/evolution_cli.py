@@ -3,6 +3,9 @@ CLI commands for Evolution management (v0.3.0)
 """
 from __future__ import annotations
 
+import json
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -210,6 +213,177 @@ def cmd_evolution_list(version: str) -> int:
         return 2
 
 
+def cmd_evolution_prove(evolution_id: str, parallel: bool = False, show: bool = False) -> int:
+    """Prove an evolution by running its validation pipeline and recording results"""
+    try:
+        data = _get_db()
+
+        # Load evolution
+        evolution_rows = data.query(
+            "SELECT evolution_id, generation_id, change_id, status, tag FROM evolutions WHERE evolution_id = ? OR tag = ?",
+            (evolution_id, evolution_id),
+        )
+        if not evolution_rows:
+            typer.echo(f"Error: Evolution '{evolution_id}' not found", err=True)
+            data.close()
+            return 2
+
+        evolution = evolution_rows[0]
+        evo_id = evolution["evolution_id"]
+        gen_id = evolution["generation_id"]
+        change_id = evolution["change_id"]
+        evo_tag = evolution["tag"]
+
+        # Load change to get pipeline filename
+        change_rows = data.query(
+            "SELECT pipeline, title FROM generation_changes WHERE generation_id = ? AND change_id = ?",
+            (gen_id, change_id),
+        )
+        if not change_rows:
+            typer.echo(f"Error: Change {change_id} not found", err=True)
+            data.close()
+            return 2
+
+        pipeline_filename = change_rows[0]["pipeline"]
+        change_title = change_rows[0]["title"]
+
+        if not pipeline_filename:
+            typer.echo(f"Error: No validation pipeline defined for change {change_id}", err=True)
+            typer.echo(f"Run: gryt generation gen-test <version> --change {change_id}", err=True)
+            data.close()
+            return 2
+
+        typer.echo(f"Proving evolution: {evo_tag}")
+        typer.echo(f"  Change: {change_id} - {change_title}")
+        typer.echo(f"  Pipeline: {pipeline_filename}")
+        typer.echo()
+
+        # Create pipeline record
+        pipeline_id = str(uuid.uuid4())
+        start_time = datetime.utcnow()
+
+        data.insert(
+            "pipelines",
+            {
+                "pipeline_id": pipeline_id,
+                "name": pipeline_filename,
+                "start_timestamp": start_time.isoformat(),
+                "config_json": json.dumps({"evolution_id": evo_id, "tag": evo_tag}),
+            },
+        )
+
+        # Update evolution to mark as running
+        data.execute(
+            "UPDATE evolutions SET status = ?, started_at = ? WHERE evolution_id = ?",
+            ("running", start_time.isoformat(), evo_id),
+        )
+        data.commit()
+
+        # Execute pipeline (reuse logic from cli.py)
+        from .cli import _resolve_pipeline_script, _load_module_from_path, _get_pipeline_from_module
+        from .paths import get_repo_gryt_dir
+
+        gryt_dir = get_repo_gryt_dir()
+        if not gryt_dir:
+            typer.echo("Error: Not in a gryt repository", err=True)
+            data.close()
+            return 2
+
+        try:
+            script_path = _resolve_pipeline_script(pipeline_filename, gryt_dir.parent)
+            mod = _load_module_from_path(script_path)
+            pipeline = _get_pipeline_from_module(mod)
+
+            if pipeline is None:
+                typer.echo("Error: Pipeline not found in script", err=True)
+                data.close()
+                return 2
+
+            # Inject data into pipeline so steps can write to DB
+            if pipeline.data is None:
+                pipeline.data = data
+
+            typer.echo("Running validation pipeline...\n")
+            results = pipeline.execute(parallel=parallel, show=show)
+
+            # Determine success/failure
+            exit_code = 0
+            pipeline_status = "success"
+            evolution_status = "pass"
+
+            # Check environment validation failures
+            if results.get("status") == "invalid_env":
+                exit_code = 1
+                pipeline_status = "error"
+                evolution_status = "fail"
+            else:
+                # Check runner results for failures
+                runners = results.get("runners", results)
+                for runner_result in runners.values():
+                    steps = runner_result.get("steps", {})
+                    for step_result in steps.values():
+                        if step_result.get("status") == "error":
+                            step_rc = step_result.get("returncode")
+                            if step_rc is not None and step_rc != 0:
+                                exit_code = step_rc
+                            else:
+                                exit_code = 1
+                            pipeline_status = "error"
+                            evolution_status = "fail"
+                            break
+                    if exit_code != 0:
+                        break
+
+            # Update pipeline record with completion
+            end_time = datetime.utcnow()
+            data.execute(
+                "UPDATE pipelines SET end_timestamp = ?, status = ? WHERE pipeline_id = ?",
+                (end_time.isoformat(), pipeline_status, pipeline_id),
+            )
+
+            # Update evolution record with results
+            data.execute(
+                "UPDATE evolutions SET pipeline_run_id = ?, status = ?, completed_at = ? WHERE evolution_id = ?",
+                (pipeline_id, evolution_status, end_time.isoformat(), evo_id),
+            )
+            data.commit()
+
+            # Display results
+            typer.echo()
+            if evolution_status == "pass":
+                typer.echo(f"✓ Evolution {evo_tag} PASSED")
+            else:
+                typer.echo(f"✗ Evolution {evo_tag} FAILED")
+
+            typer.echo(f"  Pipeline run ID: {pipeline_id}")
+            typer.echo(f"  Duration: {(end_time - start_time).total_seconds():.2f}s")
+            typer.echo()
+            typer.echo("Detailed results:")
+            typer.echo(json.dumps({"status": "ok" if exit_code == 0 else "error", "results": results}, indent=2))
+
+            data.close()
+            return exit_code
+
+        except Exception as e:
+            # Update pipeline and evolution as failed
+            end_time = datetime.utcnow()
+            data.execute(
+                "UPDATE pipelines SET end_timestamp = ?, status = ? WHERE pipeline_id = ?",
+                (end_time.isoformat(), "error", pipeline_id),
+            )
+            data.execute(
+                "UPDATE evolutions SET pipeline_run_id = ?, status = ?, completed_at = ? WHERE evolution_id = ?",
+                (pipeline_id, "fail", end_time.isoformat(), evo_id),
+            )
+            data.commit()
+            data.close()
+            raise
+
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        return 2
+
+
 # Register commands
 @evolution_app.command("start", help="Start a new evolution for a generation change")
 def start_command(
@@ -226,4 +400,14 @@ def list_command(
     version: str = typer.Argument(..., help="Generation version (e.g., v2.2.0)"),
 ):
     code = cmd_evolution_list(version)
+    raise typer.Exit(code)
+
+
+@evolution_app.command("prove", help="Prove an evolution by running its validation pipeline")
+def prove_command(
+    evolution_id: str = typer.Argument(..., help="Evolution ID or tag (e.g., v2.2.0-rc.1)"),
+    parallel: bool = typer.Option(False, "--parallel", "-p", help="Run pipeline runners in parallel"),
+    show: bool = typer.Option(False, "--show", "-s", help="Show pipeline output in real-time"),
+):
+    code = cmd_evolution_prove(evolution_id, parallel, show)
     raise typer.Exit(code)
