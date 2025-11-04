@@ -28,6 +28,7 @@ class GenerationChange:
         description: Optional[str] = None,
         status: str = "pending",
         pipeline: Optional[str] = None,
+        pipelines: Optional[List[Dict[str, Any]]] = None,
     ):
         self.change_id = change_id
         self.type = change_type
@@ -35,16 +36,23 @@ class GenerationChange:
         self.description = description
         self.status = status
         self.pipeline = pipeline
+        self.pipelines = pipelines or []
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "id": self.change_id,
             "type": self.type,
             "title": self.title,
             "description": self.description,
             "status": self.status,
-            "pipeline": self.pipeline,  # Always include, even if None
+            "pipeline": self.pipeline,  # Legacy field - backward compatibility
         }
+
+        # Include pipelines array if there are any
+        if self.pipelines:
+            result["pipelines"] = self.pipelines
+
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GenerationChange:
@@ -145,21 +153,38 @@ class Generation:
         for c in changes_rows:
             logger.info(f"  DB row: change_id={c['change_id']}, pipeline={c.get('pipeline')}")
 
-        changes = [
-            GenerationChange(
-                change_id=c["change_id"],
-                change_type=c["type"],
-                title=c["title"],
-                description=c.get("description"),
-                status=c["status"],
-                pipeline=c.get("pipeline"),
+        changes = []
+        for c in changes_rows:
+            # Load linked pipelines from change_pipelines table
+            pipelines_rows = data.query(
+                "SELECT pipeline_name, is_primary, created_by, created_at FROM change_pipelines WHERE change_id = ? AND generation_id = ? ORDER BY is_primary DESC, pipeline_name",
+                (c["change_id"], generation_id),
             )
-            for c in changes_rows
-        ]
+
+            pipelines_list = [
+                {
+                    "pipeline_name": p["pipeline_name"],
+                    "is_primary": bool(p["is_primary"]),
+                    "created_by": p.get("created_by"),
+                }
+                for p in pipelines_rows
+            ]
+
+            changes.append(
+                GenerationChange(
+                    change_id=c["change_id"],
+                    change_type=c["type"],
+                    title=c["title"],
+                    description=c.get("description"),
+                    status=c["status"],
+                    pipeline=c.get("pipeline"),
+                    pipelines=pipelines_list if pipelines_list else None,
+                )
+            )
 
         # Debug: Log what GenerationChange objects have
         for change in changes:
-            logger.info(f"  GenerationChange object: {change.change_id}, pipeline={change.pipeline}")
+            logger.info(f"  GenerationChange object: {change.change_id}, pipeline={change.pipeline}, pipelines={len(change.pipelines)} linked")
 
         # Parse datetime strings from DB
         created_at = row.get("created_at")

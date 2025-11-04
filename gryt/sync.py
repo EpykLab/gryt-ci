@@ -289,7 +289,7 @@ class CloudSync:
 
         # Get generation
         rows = self.data.query(
-            "SELECT generation_id FROM generations WHERE version = ?",
+            "SELECT generation_id, remote_id FROM generations WHERE version = ?",
             (version,)
         )
         if not rows:
@@ -300,35 +300,140 @@ class CloudSync:
             return result
 
         gen_id = rows[0]["generation_id"]
+        gen_remote_id = rows[0]["remote_id"]
+
+        # Check if generation has been synced to cloud
+        if not gen_remote_id:
+            result["errors"].append({
+                "version": version,
+                "error": "Generation not synced to cloud yet. Run 'gryt sync push' first."
+            })
+            return result
+
+        # Get cloud generation to find its DB id
+        try:
+            cloud_gen = self.client.get_generation_by_version(version)
+            cloud_gen_db_id = cloud_gen["id"]  # This is the integer DB id
+        except Exception as e:
+            result["errors"].append({
+                "version": version,
+                "error": f"Failed to get cloud generation: {e}"
+            })
+            return result
 
         # Get evolutions for this generation
         evos = Evolution.list_for_generation(self.data, gen_id)
 
         for evo in evos:
             try:
+                # Find the cloud change DB id by change_id
+                cloud_change = None
+                for change in cloud_gen.get("changes", []):
+                    if change["id"] == evo.change_id:
+                        cloud_change = change
+                        break
+
+                if not cloud_change:
+                    result["errors"].append({
+                        "tag": evo.tag,
+                        "error": f"Change {evo.change_id} not found in cloud generation"
+                    })
+                    continue
+
+                # Get the cloud DB id for this change
+                # We need to query the cloud API to get the change's internal DB id
+                # For now, we'll use the change_id from the cloud generation response
+                # The API expects the DB id, which we need to extract from the cloud response
+
+                # Prepare evolution data with cloud DB IDs
+                evo_data = {
+                    "evolution_id": evo.evolution_id,
+                    "generation_id": str(cloud_gen_db_id),  # Convert to string for Pydantic validation
+                    "change_id": evo.change_id,  # String like "DB-001" - API will look it up
+                    "tag": evo.tag,
+                    "status": evo.status,
+                    "pipeline_run_id": evo.pipeline_run_id,
+                    "created_by": evo.created_by,
+                }
+
                 if evo.remote_id:
                     # Update existing
-                    self.client.update_evolution(
-                        evo.remote_id,
-                        evo.to_dict()
-                    )
+                    update_data = {
+                        "status": evo.status,
+                        "pipeline_run_id": evo.pipeline_run_id,
+                        "completed_at": evo.completed_at.isoformat() if evo.completed_at else None,
+                    }
+                    self.client.update_evolution(evo.remote_id, update_data)
                     result["updated"] += 1
                 else:
                     # Create new
-                    cloud_result = self.client.create_evolution(evo.to_dict())
+                    try:
+                        cloud_result = self.client.create_evolution(evo_data)
 
-                    # Save remote_id
-                    self.data.update(
-                        "evolutions",
-                        {
-                            "remote_id": cloud_result["id"],
-                            "sync_status": "synced",
-                            "last_synced_at": datetime.now()
-                        },
-                        "evolution_id = ?",
-                        (evo.evolution_id,)
-                    )
-                    result["created"] += 1
+                        # Extract the id from the nested data field
+                        remote_id = cloud_result.get("data", {}).get("id") if isinstance(cloud_result, dict) else None
+                        if not remote_id:
+                            raise ValueError(f"Invalid API response: missing id in {cloud_result}")
+
+                        # Save remote_id
+                        self.data.update(
+                            "evolutions",
+                            {
+                                "remote_id": str(remote_id),
+                                "sync_status": "synced",
+                                "last_synced_at": datetime.now()
+                            },
+                            "evolution_id = ?",
+                            (evo.evolution_id,)
+                        )
+                        result["created"] += 1
+
+                    except Exception as create_error:
+                        # Check if it's a duplicate key error
+                        error_str = str(create_error)
+                        if "duplicate key" in error_str.lower() or "already exists" in error_str.lower():
+                            # Evolution already exists in cloud, fetch it to get remote_id
+                            try:
+                                evolutions_list = self.client.list_evolutions(generation_id=str(cloud_gen_db_id))
+                                cloud_evos = evolutions_list.get("data", {}).get("evolutions", [])
+
+                                # Find matching evolution by evolution_id
+                                matching_evo = None
+                                for cloud_evo in cloud_evos:
+                                    if cloud_evo.get("evolution_id") == evo.evolution_id:
+                                        matching_evo = cloud_evo
+                                        break
+
+                                if matching_evo:
+                                    # Save remote_id and update
+                                    remote_id = matching_evo["id"]
+                                    self.data.update(
+                                        "evolutions",
+                                        {
+                                            "remote_id": str(remote_id),
+                                            "sync_status": "synced",
+                                            "last_synced_at": datetime.now()
+                                        },
+                                        "evolution_id = ?",
+                                        (evo.evolution_id,)
+                                    )
+
+                                    # Now update it with latest data
+                                    update_data = {
+                                        "status": evo.status,
+                                        "pipeline_run_id": evo.pipeline_run_id,
+                                        "completed_at": evo.completed_at.isoformat() if evo.completed_at else None,
+                                    }
+                                    self.client.update_evolution(str(remote_id), update_data)
+                                    result["updated"] += 1
+                                else:
+                                    raise create_error
+                            except Exception:
+                                # If we can't recover, re-raise original error
+                                raise create_error
+                        else:
+                            # Not a duplicate error, re-raise
+                            raise
 
             except Exception as e:
                 result["errors"].append({

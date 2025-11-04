@@ -166,12 +166,47 @@ def cmd_generation_update(version: str) -> int:
         updated_gen.generation_id = generation_id
 
         # Update database
-        # First, delete existing changes for this generation
-        data.conn.execute(
-            "DELETE FROM generation_changes WHERE generation_id = ?",
+        # Get existing changes to preserve pipeline data
+        existing_changes = data.query(
+            "SELECT change_id, pipeline FROM generation_changes WHERE generation_id = ?",
             (generation_id,)
         )
-        data.conn.commit()
+        existing_pipelines = {row["change_id"]: row["pipeline"] for row in existing_changes}
+
+        # Get list of change IDs from YAML
+        yaml_change_ids = {change.change_id for change in updated_gen.changes}
+        existing_change_ids = set(existing_pipelines.keys())
+
+        # Check for changes removed from YAML that have evolutions
+        removed_change_ids = existing_change_ids - yaml_change_ids
+        if removed_change_ids:
+            # Check which removed changes have evolutions
+            changes_to_delete = []
+            changes_to_preserve = []
+
+            for change_id in removed_change_ids:
+                evolutions = data.query(
+                    "SELECT COUNT(*) as count FROM evolutions WHERE change_id = ?",
+                    (change_id,)
+                )
+                if evolutions and evolutions[0]["count"] > 0:
+                    changes_to_preserve.append((change_id, evolutions[0]["count"]))
+                else:
+                    changes_to_delete.append(change_id)
+
+            # Warn about preserved changes
+            if changes_to_preserve:
+                typer.echo("\nWarning: The following changes were removed from YAML but have evolutions:", err=True)
+                for change_id, count in changes_to_preserve:
+                    typer.echo(f"  • {change_id}: {count} evolution(s) - PRESERVING in database", err=True)
+
+            # Delete changes that have NO evolutions
+            for change_id in changes_to_delete:
+                typer.echo(f"  Deleting change {change_id} (no evolutions)")
+                data.conn.execute(
+                    "DELETE FROM generation_changes WHERE generation_id = ? AND change_id = ?",
+                    (generation_id, change_id)
+                )
 
         # Update generation record and mark as modified (needs sync)
         data.update(
@@ -185,20 +220,39 @@ def cmd_generation_update(version: str) -> int:
             (generation_id,)
         )
 
-        # Insert updated changes
+        # Update or insert changes
         for change in updated_gen.changes:
-            data.insert(
-                "generation_changes",
-                {
-                    "generation_id": generation_id,
-                    "change_id": change.change_id,
-                    "type": change.type,
-                    "title": change.title,
-                    "description": change.description,
-                    "status": change.status,
-                    "pipeline": change.pipeline,
-                }
-            )
+            if change.change_id in existing_change_ids:
+                # Update existing change, preserving pipeline field
+                data.update(
+                    "generation_changes",
+                    {
+                        "type": change.type,
+                        "title": change.title,
+                        "description": change.description,
+                        "status": change.status,
+                        # Preserve existing pipeline value from database
+                        "pipeline": existing_pipelines[change.change_id],
+                    },
+                    "generation_id = ? AND change_id = ?",
+                    (generation_id, change.change_id)
+                )
+            else:
+                # Insert new change
+                data.insert(
+                    "generation_changes",
+                    {
+                        "generation_id": generation_id,
+                        "change_id": change.change_id,
+                        "type": change.type,
+                        "title": change.title,
+                        "description": change.description,
+                        "status": change.status,
+                        "pipeline": change.pipeline,
+                    }
+                )
+
+        data.conn.commit()
 
         data.close()
 
