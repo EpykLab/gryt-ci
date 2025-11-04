@@ -213,8 +213,8 @@ def cmd_evolution_list(version: str) -> int:
         return 2
 
 
-def cmd_evolution_prove(evolution_id: str, parallel: bool = False, show: bool = False) -> int:
-    """Prove an evolution by running its validation pipeline and recording results"""
+def cmd_evolution_prove(evolution_id: str, pipeline_filter: Optional[str] = None, parallel: bool = False, show: bool = False) -> int:
+    """Prove an evolution by running its validation pipeline(s) and recording results"""
     try:
         data = _get_db()
 
@@ -234,7 +234,7 @@ def cmd_evolution_prove(evolution_id: str, parallel: bool = False, show: bool = 
         change_id = evolution["change_id"]
         evo_tag = evolution["tag"]
 
-        # Load change to get pipeline filename
+        # Load change details
         change_rows = data.query(
             "SELECT pipeline, title FROM generation_changes WHERE generation_id = ? AND change_id = ?",
             (gen_id, change_id),
@@ -244,42 +244,45 @@ def cmd_evolution_prove(evolution_id: str, parallel: bool = False, show: bool = 
             data.close()
             return 2
 
-        pipeline_filename = change_rows[0]["pipeline"]
         change_title = change_rows[0]["title"]
 
-        if not pipeline_filename:
-            typer.echo(f"Error: No validation pipeline defined for change {change_id}", err=True)
+        # Get all linked pipelines for this change
+        pipeline_links = data.query(
+            "SELECT pipeline_name, is_primary FROM change_pipelines WHERE change_id = ? AND generation_id = ? ORDER BY is_primary DESC, pipeline_name",
+            (change_id, gen_id),
+        )
+
+        if not pipeline_links:
+            typer.echo(f"Error: No validation pipelines linked to change {change_id}", err=True)
             typer.echo(f"Run: gryt generation gen-test <version> --change {change_id}", err=True)
             data.close()
             return 2
 
+        # Filter pipelines if requested
+        if pipeline_filter:
+            pipeline_links = [p for p in pipeline_links if p["pipeline_name"] == pipeline_filter]
+            if not pipeline_links:
+                typer.echo(f"Error: Pipeline '{pipeline_filter}' is not linked to change {change_id}", err=True)
+                data.close()
+                return 2
+
         typer.echo(f"Proving evolution: {evo_tag}")
         typer.echo(f"  Change: {change_id} - {change_title}")
-        typer.echo(f"  Pipeline: {pipeline_filename}")
+        typer.echo(f"  Pipelines to run: {len(pipeline_links)}")
+        for link in pipeline_links:
+            primary_marker = " (primary)" if link["is_primary"] else ""
+            typer.echo(f"    - {link['pipeline_name']}{primary_marker}")
         typer.echo()
 
-        # Create pipeline record
-        pipeline_id = str(uuid.uuid4())
-        start_time = datetime.utcnow()
-
-        data.insert(
-            "pipelines",
-            {
-                "pipeline_id": pipeline_id,
-                "name": pipeline_filename,
-                "start_timestamp": start_time.isoformat(),
-                "config_json": json.dumps({"evolution_id": evo_id, "tag": evo_tag}),
-            },
-        )
-
         # Update evolution to mark as running
+        start_time = datetime.utcnow()
         data.execute(
             "UPDATE evolutions SET status = ?, started_at = ? WHERE evolution_id = ?",
             ("running", start_time.isoformat(), evo_id),
         )
         data.commit()
 
-        # Execute pipeline (reuse logic from cli.py)
+        # Execute all pipelines
         from .cli import _resolve_pipeline_script, _load_module_from_path, _get_pipeline_from_module
         from .paths import get_repo_gryt_dir
 
@@ -289,95 +292,303 @@ def cmd_evolution_prove(evolution_id: str, parallel: bool = False, show: bool = 
             data.close()
             return 2
 
+        all_pipeline_runs = []
+        overall_exit_code = 0
+        overall_status = "pass"
+
         try:
-            script_path = _resolve_pipeline_script(pipeline_filename, gryt_dir.parent)
-            mod = _load_module_from_path(script_path)
-            pipeline = _get_pipeline_from_module(mod)
+            for idx, link in enumerate(pipeline_links, 1):
+                pipeline_filename = link["pipeline_name"]
+                typer.echo(f"[{idx}/{len(pipeline_links)}] Running {pipeline_filename}...")
 
-            if pipeline is None:
-                typer.echo("Error: Pipeline not found in script", err=True)
-                data.close()
-                return 2
+                # Create pipeline record
+                pipeline_id = str(uuid.uuid4())
+                pipeline_start = datetime.utcnow()
 
-            # Inject data into pipeline so steps can write to DB
-            if pipeline.data is None:
-                pipeline.data = data
+                data.insert(
+                    "pipelines",
+                    {
+                        "pipeline_id": pipeline_id,
+                        "name": pipeline_filename,
+                        "start_timestamp": pipeline_start.isoformat(),
+                        "config_json": json.dumps({"evolution_id": evo_id, "tag": evo_tag, "sequence": idx}),
+                    },
+                )
+                data.commit()
 
-            typer.echo("Running validation pipeline...\n")
-            results = pipeline.execute(parallel=parallel, show=show)
+                # Load and execute pipeline
+                script_path = _resolve_pipeline_script(pipeline_filename, gryt_dir.parent)
+                mod = _load_module_from_path(script_path)
+                pipeline = _get_pipeline_from_module(mod)
 
-            # Determine success/failure
-            exit_code = 0
-            pipeline_status = "success"
-            evolution_status = "pass"
+                if pipeline is None:
+                    typer.echo(f"Error: Pipeline not found in {pipeline_filename}", err=True)
+                    data.execute(
+                        "UPDATE pipelines SET end_timestamp = ?, status = ? WHERE pipeline_id = ?",
+                        (datetime.utcnow().isoformat(), "error", pipeline_id),
+                    )
+                    data.commit()
+                    overall_exit_code = 2
+                    overall_status = "fail"
+                    continue
 
-            # Check environment validation failures
-            if results.get("status") == "invalid_env":
-                exit_code = 1
-                pipeline_status = "error"
-                evolution_status = "fail"
-            else:
-                # Check runner results for failures
-                runners = results.get("runners", results)
-                for runner_result in runners.values():
-                    steps = runner_result.get("steps", {})
-                    for step_result in steps.values():
-                        if step_result.get("status") == "error":
-                            step_rc = step_result.get("returncode")
-                            if step_rc is not None and step_rc != 0:
-                                exit_code = step_rc
-                            else:
-                                exit_code = 1
-                            pipeline_status = "error"
-                            evolution_status = "fail"
+                # Inject data into pipeline so steps can write to DB
+                if pipeline.data is None:
+                    pipeline.data = data
+
+                results = pipeline.execute(parallel=parallel, show=show)
+
+                # Determine success/failure for this pipeline
+                pipeline_exit_code = 0
+                pipeline_status = "success"
+
+                # Check environment validation failures
+                if results.get("status") == "invalid_env":
+                    pipeline_exit_code = 1
+                    pipeline_status = "error"
+                else:
+                    # Check runner results for failures
+                    runners = results.get("runners", results)
+                    for runner_result in runners.values():
+                        steps = runner_result.get("steps", {})
+                        for step_result in steps.values():
+                            if step_result.get("status") == "error":
+                                step_rc = step_result.get("returncode")
+                                if step_rc is not None and step_rc != 0:
+                                    pipeline_exit_code = step_rc
+                                else:
+                                    pipeline_exit_code = 1
+                                pipeline_status = "error"
+                                break
+                        if pipeline_exit_code != 0:
                             break
-                    if exit_code != 0:
-                        break
 
-            # Update pipeline record with completion
-            end_time = datetime.utcnow()
-            data.execute(
-                "UPDATE pipelines SET end_timestamp = ?, status = ? WHERE pipeline_id = ?",
-                (end_time.isoformat(), pipeline_status, pipeline_id),
-            )
+                # Update pipeline record with completion
+                pipeline_end = datetime.utcnow()
+                data.execute(
+                    "UPDATE pipelines SET end_timestamp = ?, status = ? WHERE pipeline_id = ?",
+                    (pipeline_end.isoformat(), pipeline_status, pipeline_id),
+                )
+                data.commit()
+
+                # Track results
+                all_pipeline_runs.append({
+                    "pipeline_id": pipeline_id,
+                    "name": pipeline_filename,
+                    "status": pipeline_status,
+                    "exit_code": pipeline_exit_code,
+                    "duration": (pipeline_end - pipeline_start).total_seconds(),
+                    "results": results,
+                })
+
+                # Update overall status
+                if pipeline_exit_code != 0:
+                    overall_exit_code = pipeline_exit_code
+                    overall_status = "fail"
+
+                # Display individual result
+                if pipeline_status == "success":
+                    typer.echo(f"  ✓ {pipeline_filename} PASSED ({(pipeline_end - pipeline_start).total_seconds():.2f}s)")
+                else:
+                    typer.echo(f"  ✗ {pipeline_filename} FAILED ({(pipeline_end - pipeline_start).total_seconds():.2f}s)")
+
+                typer.echo()
 
             # Update evolution record with results
+            # Note: pipeline_run_id will store the last (or primary) pipeline run ID
+            primary_pipeline_id = all_pipeline_runs[0]["pipeline_id"] if all_pipeline_runs else None
+            end_time = datetime.utcnow()
             data.execute(
                 "UPDATE evolutions SET pipeline_run_id = ?, status = ?, completed_at = ? WHERE evolution_id = ?",
-                (pipeline_id, evolution_status, end_time.isoformat(), evo_id),
+                (primary_pipeline_id, overall_status, end_time.isoformat(), evo_id),
             )
             data.commit()
 
-            # Display results
-            typer.echo()
-            if evolution_status == "pass":
+            # Display overall results
+            typer.echo("=" * 60)
+            if overall_status == "pass":
                 typer.echo(f"✓ Evolution {evo_tag} PASSED")
             else:
                 typer.echo(f"✗ Evolution {evo_tag} FAILED")
 
-            typer.echo(f"  Pipeline run ID: {pipeline_id}")
-            typer.echo(f"  Duration: {(end_time - start_time).total_seconds():.2f}s")
+            typer.echo(f"  Total duration: {(end_time - start_time).total_seconds():.2f}s")
+            typer.echo(f"  Pipelines run: {len(all_pipeline_runs)}")
+            passed = sum(1 for r in all_pipeline_runs if r["status"] == "success")
+            failed = len(all_pipeline_runs) - passed
+            typer.echo(f"  Results: {passed} passed, {failed} failed")
             typer.echo()
             typer.echo("Detailed results:")
-            typer.echo(json.dumps({"status": "ok" if exit_code == 0 else "error", "results": results}, indent=2))
+            typer.echo(json.dumps({
+                "status": "ok" if overall_exit_code == 0 else "error",
+                "overall_exit_code": overall_exit_code,
+                "pipelines": all_pipeline_runs,
+            }, indent=2))
 
             data.close()
-            return exit_code
+            return overall_exit_code
 
         except Exception as e:
-            # Update pipeline and evolution as failed
+            # Update evolution as failed
             end_time = datetime.utcnow()
             data.execute(
-                "UPDATE pipelines SET end_timestamp = ?, status = ? WHERE pipeline_id = ?",
-                (end_time.isoformat(), "error", pipeline_id),
-            )
-            data.execute(
-                "UPDATE evolutions SET pipeline_run_id = ?, status = ?, completed_at = ? WHERE evolution_id = ?",
-                (pipeline_id, "fail", end_time.isoformat(), evo_id),
+                "UPDATE evolutions SET status = ?, completed_at = ? WHERE evolution_id = ?",
+                ("fail", end_time.isoformat(), evo_id),
             )
             data.commit()
             data.close()
             raise
+
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        return 2
+
+
+def cmd_evolution_link_pipeline(
+    change_id: str,
+    generation: str,
+    pipeline: str,
+    primary: bool = False,
+) -> int:
+    """Link a pipeline to a change for validation"""
+    try:
+        # Ensure version starts with 'v'
+        version = generation if generation.startswith("v") else f"v{generation}"
+
+        data = _get_db()
+
+        # Find generation
+        gen_rows = data.query("SELECT generation_id FROM generations WHERE version = ?", (version,))
+        if not gen_rows:
+            typer.echo(f"Error: Generation {version} not found", err=True)
+            data.close()
+            return 2
+
+        generation_id = gen_rows[0]["generation_id"]
+
+        # Verify change exists
+        change_rows = data.query(
+            "SELECT change_id, title FROM generation_changes WHERE generation_id = ? AND change_id = ?",
+            (generation_id, change_id),
+        )
+        if not change_rows:
+            typer.echo(f"Error: Change {change_id} not found in generation {version}", err=True)
+            data.close()
+            return 2
+
+        change_title = change_rows[0]["title"]
+
+        # Verify pipeline file exists
+        from .paths import get_repo_gryt_dir
+        gryt_dir = get_repo_gryt_dir()
+        if not gryt_dir:
+            typer.echo("Error: Not in a gryt repository", err=True)
+            data.close()
+            return 2
+
+        pipeline_path = gryt_dir / "pipelines" / pipeline
+        if not pipeline_path.exists():
+            typer.echo(f"Error: Pipeline file not found: {pipeline}", err=True)
+            typer.echo(f"  Expected location: {pipeline_path}", err=True)
+            data.close()
+            return 2
+
+        # Get current user
+        from .config import Config
+        config = Config.load_with_repo_context()
+        current_user = config.username or "local"
+
+        # Check if already linked
+        existing_link = data.query(
+            "SELECT id FROM change_pipelines WHERE change_id = ? AND generation_id = ? AND pipeline_name = ?",
+            (change_id, generation_id, pipeline),
+        )
+        if existing_link:
+            typer.echo(f"✓ Pipeline '{pipeline}' is already linked to {change_id}", err=True)
+            data.close()
+            return 0
+
+        # If marking as primary, unmark other pipelines
+        if primary:
+            data.execute(
+                "UPDATE change_pipelines SET is_primary = 0 WHERE change_id = ? AND generation_id = ?",
+                (change_id, generation_id),
+            )
+            data.commit()
+
+        # Link the pipeline
+        data.insert(
+            "change_pipelines",
+            {
+                "change_id": change_id,
+                "generation_id": generation_id,
+                "pipeline_name": pipeline,
+                "is_primary": 1 if primary else 0,
+                "created_at": datetime.utcnow().isoformat(),
+                "created_by": current_user,
+            },
+        )
+
+        data.close()
+
+        typer.echo(f"✓ Linked pipeline '{pipeline}' to change {change_id}")
+        typer.echo(f"  Change: {change_title}")
+        typer.echo(f"  Generation: {version}")
+        if primary:
+            typer.echo(f"  Marked as primary validation pipeline")
+
+        return 0
+
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        return 2
+
+
+def cmd_evolution_unlink_pipeline(
+    change_id: str,
+    generation: str,
+    pipeline: str,
+) -> int:
+    """Unlink a pipeline from a change"""
+    try:
+        # Ensure version starts with 'v'
+        version = generation if generation.startswith("v") else f"v{generation}"
+
+        data = _get_db()
+
+        # Find generation
+        gen_rows = data.query("SELECT generation_id FROM generations WHERE version = ?", (version,))
+        if not gen_rows:
+            typer.echo(f"Error: Generation {version} not found", err=True)
+            data.close()
+            return 2
+
+        generation_id = gen_rows[0]["generation_id"]
+
+        # Check if link exists
+        existing_link = data.query(
+            "SELECT id, is_primary FROM change_pipelines WHERE change_id = ? AND generation_id = ? AND pipeline_name = ?",
+            (change_id, generation_id, pipeline),
+        )
+        if not existing_link:
+            typer.echo(f"Error: Pipeline '{pipeline}' is not linked to change {change_id}", err=True)
+            data.close()
+            return 2
+
+        was_primary = existing_link[0]["is_primary"]
+
+        # Delete the link
+        data.execute(
+            "DELETE FROM change_pipelines WHERE change_id = ? AND generation_id = ? AND pipeline_name = ?",
+            (change_id, generation_id, pipeline),
+        )
+        data.commit()
+        data.close()
+
+        typer.echo(f"✓ Unlinked pipeline '{pipeline}' from change {change_id}")
+        if was_primary:
+            typer.echo(f"  Warning: This was the primary validation pipeline")
+
+        return 0
 
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
@@ -403,11 +614,33 @@ def list_command(
     raise typer.Exit(code)
 
 
-@evolution_app.command("prove", help="Prove an evolution by running its validation pipeline")
+@evolution_app.command("prove", help="Prove an evolution by running its validation pipeline(s)")
 def prove_command(
     evolution_id: str = typer.Argument(..., help="Evolution ID or tag (e.g., v2.2.0-rc.1)"),
-    parallel: bool = typer.Option(False, "--parallel", "-p", help="Run pipeline runners in parallel"),
+    pipeline: Optional[str] = typer.Option(None, "--pipeline", help="Run only this specific pipeline (default: run all linked pipelines)"),
+    parallel: bool = typer.Option(False, "--parallel", help="Run pipeline runners in parallel"),
     show: bool = typer.Option(False, "--show", "-s", help="Show pipeline output in real-time"),
 ):
-    code = cmd_evolution_prove(evolution_id, parallel, show)
+    code = cmd_evolution_prove(evolution_id, pipeline, parallel, show)
+    raise typer.Exit(code)
+
+
+@evolution_app.command("link-pipeline", help="Link an additional pipeline to a change for validation")
+def link_pipeline_command(
+    change: str = typer.Option(..., "--change", "-c", help="Change ID (e.g., PAY-001)"),
+    generation: str = typer.Option(..., "--generation", "-g", help="Generation version (e.g., v2.2.0)"),
+    pipeline: str = typer.Option(..., "--pipeline", "-p", help="Pipeline filename (e.g., integration_tests.py)"),
+    primary: bool = typer.Option(False, "--primary", help="Mark this as the primary validation pipeline"),
+):
+    code = cmd_evolution_link_pipeline(change, generation, pipeline, primary)
+    raise typer.Exit(code)
+
+
+@evolution_app.command("unlink-pipeline", help="Unlink a pipeline from a change")
+def unlink_pipeline_command(
+    change: str = typer.Option(..., "--change", "-c", help="Change ID (e.g., PAY-001)"),
+    generation: str = typer.Option(..., "--generation", "-g", help="Generation version (e.g., v2.2.0)"),
+    pipeline: str = typer.Option(..., "--pipeline", "-p", help="Pipeline filename to unlink"),
+):
+    code = cmd_evolution_unlink_pipeline(change, generation, pipeline)
     raise typer.Exit(code)

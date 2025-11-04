@@ -311,6 +311,23 @@ class SqliteData(Data):
                 )
                 """
             )
+            # change_pipelines (v1.0.10 - multiple pipelines per change)
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS change_pipelines (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    change_id TEXT NOT NULL,
+                    generation_id TEXT NOT NULL,
+                    pipeline_name TEXT NOT NULL,
+                    is_primary INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    created_by TEXT,
+                    FOREIGN KEY (change_id) REFERENCES generation_changes(change_id) ON DELETE CASCADE,
+                    FOREIGN KEY (generation_id) REFERENCES generations(generation_id) ON DELETE CASCADE,
+                    UNIQUE(change_id, generation_id, pipeline_name)
+                )
+                """
+            )
             self.conn.commit()
 
     def _jsonify(self, value: Any) -> Any:

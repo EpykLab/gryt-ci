@@ -389,6 +389,30 @@ def cmd_generation_gen_test(
                 (change.change_id,),
             )
 
+            # Link pipeline in change_pipelines table (v1.0.10)
+            from .config import Config
+            from datetime import datetime
+            config = Config.load_with_repo_context()
+            current_user = config.username or "local"
+
+            # Check if this pipeline is already linked
+            existing_link = data.query(
+                "SELECT id FROM change_pipelines WHERE change_id = ? AND generation_id = ? AND pipeline_name = ?",
+                (change.change_id, generation.generation_id, pipeline_filename),
+            )
+            if not existing_link:
+                data.insert(
+                    "change_pipelines",
+                    {
+                        "change_id": change.change_id,
+                        "generation_id": generation.generation_id,
+                        "pipeline_name": pipeline_filename,
+                        "is_primary": 1,  # Generated pipelines are primary
+                        "created_at": datetime.utcnow().isoformat(),
+                        "created_by": current_user,
+                    },
+                )
+
             # Update in-memory change object
             change.pipeline = pipeline_filename
 
