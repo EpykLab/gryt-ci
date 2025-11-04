@@ -380,6 +380,16 @@ class SqliteData(Data):
             )
             self.conn.commit()
 
+    def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> None:
+        """Execute arbitrary SQL statement (UPDATE, DELETE, etc.) without returning results."""
+        with self._lock:
+            self.conn.execute(sql, params)
+
+    def commit(self) -> None:
+        """Commit pending transactions."""
+        with self._lock:
+            self.conn.commit()
+
     def migrate(self) -> Dict[str, Any]:
         """
         Run schema migrations (idempotent). Returns a report of applied migrations.
