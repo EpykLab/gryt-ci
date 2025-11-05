@@ -616,6 +616,9 @@ class CloudSync:
                 "pipeline": change.get("pipeline")
             })
 
+        # Fetch and insert evolutions
+        self._pull_evolutions_for_generation(cloud_gen)
+
         logger.info(f"Inserted generation {cloud_gen['version']} from cloud")
 
     def _update_from_cloud(self, local_row: Dict[str, Any], cloud_gen: Dict[str, Any]) -> None:
@@ -642,6 +645,15 @@ class CloudSync:
 
         # Update changes if provided
         if "changes" in cloud_gen:
+            # IMPORTANT: Delete evolutions FIRST to avoid FK constraint issues
+            # When we delete changes, CASCADE DELETE would delete evolutions anyway,
+            # but deleting explicitly first allows us to re-insert from cloud properly
+            self.data.conn.execute(
+                "DELETE FROM evolutions WHERE generation_id = ?",
+                (generation_id,)
+            )
+            self.data.conn.commit()
+
             # Delete existing changes
             self.data.conn.execute(
                 "DELETE FROM generation_changes WHERE generation_id = ?",
@@ -662,6 +674,9 @@ class CloudSync:
                     "status": change.get("status", "pending"),
                     "pipeline": change.get("pipeline")
                 })
+
+        # Fetch and update evolutions (pass local generation_id for FK consistency)
+        self._pull_evolutions_for_generation(cloud_gen, generation_id)
 
         logger.info(f"Updated generation {cloud_gen['version']} from cloud with {len(cloud_gen.get('changes', []))} changes")
 
@@ -692,6 +707,81 @@ class CloudSync:
             (key,)
         )
         return rows[0]["value"] if rows else None
+
+    def _pull_evolutions_for_generation(self, cloud_gen: Dict[str, Any], local_generation_id: Optional[str] = None) -> None:
+        """Fetch and sync evolutions for a generation from cloud
+
+        Args:
+            cloud_gen: Cloud generation data
+            local_generation_id: Local generation_id to use for FK (if None, uses cloud_gen["generation_id"])
+        """
+        try:
+            # Use local generation_id if provided, otherwise fallback to cloud
+            generation_id = local_generation_id or cloud_gen["generation_id"]
+
+            # Fetch evolutions from cloud for this generation
+            cloud_gen_db_id = cloud_gen["id"]  # This is the integer DB id
+            evolutions_response = self.client.list_evolutions(generation_id=str(cloud_gen_db_id))
+
+            # Extract evolutions from nested response structure
+            if "data" in evolutions_response and "evolutions" in evolutions_response["data"]:
+                cloud_evolutions = evolutions_response["data"]["evolutions"]
+            elif "evolutions" in evolutions_response:
+                cloud_evolutions = evolutions_response["evolutions"]
+            else:
+                cloud_evolutions = []
+
+            logger.info(f"Pulled {len(cloud_evolutions)} evolutions for generation {cloud_gen['version']}")
+
+            for cloud_evo in cloud_evolutions:
+                # Check if evolution already exists locally by evolution_id
+                local_evo = self.data.query(
+                    "SELECT * FROM evolutions WHERE evolution_id = ?",
+                    (cloud_evo["evolution_id"],)
+                )
+
+                # Check if pipeline exists locally, if not set to None
+                # (pipelines are not synced, so they may not exist locally)
+                pipeline_run_id = cloud_evo.get("pipeline_run_id")
+                if pipeline_run_id:
+                    pipeline_check = self.data.query(
+                        "SELECT pipeline_id FROM pipelines WHERE pipeline_id = ?",
+                        (pipeline_run_id,)
+                    )
+                    if not pipeline_check:
+                        pipeline_run_id = None
+
+                evolution_data = {
+                    "evolution_id": cloud_evo["evolution_id"],
+                    "generation_id": generation_id,  # Use consistent generation_id
+                    "change_id": cloud_evo["change_id"],  # API now returns string change_id
+                    "tag": cloud_evo["tag"],
+                    "status": cloud_evo["status"],
+                    "pipeline_run_id": pipeline_run_id,  # Use validated pipeline_run_id or None
+                    "started_at": cloud_evo.get("started_at"),
+                    "completed_at": cloud_evo.get("completed_at"),
+                    "created_by": cloud_evo.get("created_by"),
+                    "remote_id": str(cloud_evo["id"]),
+                    "sync_status": "synced",
+                    "last_synced_at": datetime.now()
+                }
+
+                if local_evo:
+                    # Update existing evolution
+                    self.data.update(
+                        "evolutions",
+                        evolution_data,
+                        "evolution_id = ?",
+                        (cloud_evo["evolution_id"],)
+                    )
+                    logger.info(f"  Updated evolution {cloud_evo['tag']} from cloud")
+                else:
+                    # Insert new evolution
+                    self.data.insert("evolutions", evolution_data)
+                    logger.info(f"  Inserted evolution {cloud_evo['tag']} from cloud")
+
+        except Exception as e:
+            logger.error(f"Failed to pull evolutions for generation {cloud_gen['version']}: {e}")
 
 
 class CloudSyncHandler:
