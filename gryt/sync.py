@@ -340,6 +340,20 @@ class CloudSync:
                     })
                     continue
 
+                # Push associated pipeline run if it exists
+                if evo.pipeline_run_id:
+                    # Get the generation's team_id for pipeline association
+                    gen_row = self.data.query(
+                        "SELECT team_id FROM generations WHERE generation_id = ?",
+                        (gen_id,)
+                    )
+                    team_id = gen_row[0]["team_id"] if gen_row and gen_row[0].get("team_id") else None
+
+                    pipeline_result = self.push_pipeline_run(evo.pipeline_run_id, team_id)
+                    if not pipeline_result["success"]:
+                        # Log warning but continue - pipeline push failure shouldn't block evolution sync
+                        logger.warning(f"Failed to push pipeline {evo.pipeline_run_id} for evolution {evo.tag}: {pipeline_result.get('error')}")
+
                 # Get the cloud DB id for this change
                 # We need to query the cloud API to get the change's internal DB id
                 # For now, we'll use the change_id from the cloud generation response
@@ -780,8 +794,185 @@ class CloudSync:
                     self.data.insert("evolutions", evolution_data)
                     logger.info(f"  Inserted evolution {cloud_evo['tag']} from cloud")
 
+                # Pull associated pipeline run if it exists
+                if pipeline_run_id:
+                    # Try to pull the pipeline run (if not already local)
+                    pipeline_result = self.pull_pipeline_run(pipeline_run_id)
+                    if not pipeline_result["success"] and pipeline_result["error"] != "Pipeline run not found in cloud":
+                        logger.warning(f"  Failed to pull pipeline {pipeline_run_id} for evolution {cloud_evo['tag']}: {pipeline_result.get('error')}")
+
         except Exception as e:
             logger.error(f"Failed to pull evolutions for generation {cloud_gen['version']}: {e}")
+
+    def push_pipeline_run(self, pipeline_id: str, team_id: Optional[str] = None) -> Dict[str, Any]:
+        """Push a pipeline run with all runners and step outputs to cloud
+
+        Args:
+            pipeline_id: The pipeline ID to push
+            team_id: Optional team_id to associate with this pipeline run
+
+        Returns:
+            dict with keys: success, error
+        """
+        result = {"success": False, "error": None}
+
+        try:
+            # Get pipeline run from local DB
+            pipeline_rows = self.data.query(
+                "SELECT * FROM pipelines WHERE pipeline_id = ?",
+                (pipeline_id,)
+            )
+
+            if not pipeline_rows:
+                result["error"] = f"Pipeline {pipeline_id} not found locally"
+                return result
+
+            pipeline = pipeline_rows[0]
+
+            # Get runners for this pipeline
+            runners_rows = self.data.query(
+                "SELECT * FROM runners WHERE pipeline_id = ? ORDER BY execution_order",
+                (pipeline_id,)
+            )
+
+            # Build runners data and get step outputs
+            runners_data = []
+            step_outputs_data = []
+
+            for runner_row in runners_rows:
+                runner_id = runner_row["runner_id"]
+                runners_data.append({
+                    "runner_id": runner_id,
+                    "pipeline_id": pipeline_id,
+                    "name": runner_row.get("name"),
+                    "execution_order": runner_row.get("execution_order"),
+                    "status": runner_row.get("status")
+                })
+
+                # Get step outputs for this runner
+                steps_rows = self.data.query(
+                    "SELECT * FROM steps_output WHERE runner_id = ? ORDER BY timestamp",
+                    (runner_id,)
+                )
+
+                for step_row in steps_rows:
+                    step_outputs_data.append({
+                        "step_id": step_row.get("step_id"),
+                        "runner_id": runner_id,
+                        "name": step_row.get("name"),
+                        "output_json": step_row.get("output_json"),
+                        "stdout": step_row.get("stdout"),
+                        "stderr": step_row.get("stderr"),
+                        "status": step_row.get("status"),
+                        "duration": step_row.get("duration"),
+                        "timestamp": step_row.get("timestamp")
+                    })
+
+            # Build the batch request
+            batch_data = {
+                "pipeline_run": {
+                    "pipeline_id": pipeline_id,
+                    "name": pipeline.get("name"),
+                    "start_timestamp": pipeline.get("start_timestamp"),
+                    "end_timestamp": pipeline.get("end_timestamp"),
+                    "status": pipeline.get("status"),
+                    "config_json": pipeline.get("config_json"),
+                    "team_id": team_id
+                },
+                "runners": runners_data,
+                "step_outputs": step_outputs_data
+            }
+
+            # Push to cloud
+            cloud_result = self.client.create_pipeline_run(batch_data)
+
+            if "data" in cloud_result:
+                result["success"] = True
+                logger.info(f"Pushed pipeline run {pipeline_id} to cloud with {len(runners_data)} runners and {len(step_outputs_data)} steps")
+            else:
+                result["error"] = f"Unexpected API response: {cloud_result}"
+
+        except Exception as e:
+            result["error"] = str(e)
+            logger.error(f"Failed to push pipeline run {pipeline_id}: {e}")
+
+        return result
+
+    def pull_pipeline_run(self, pipeline_id: str) -> Dict[str, Any]:
+        """Pull a pipeline run from cloud and sync to local DB
+
+        Args:
+            pipeline_id: The pipeline ID to pull
+
+        Returns:
+            dict with keys: success, error
+        """
+        result = {"success": False, "error": None}
+
+        try:
+            # Fetch from cloud
+            cloud_result = self.client.get_pipeline_run(pipeline_id)
+
+            if "data" not in cloud_result:
+                result["error"] = "Pipeline run not found in cloud"
+                return result
+
+            pipeline_data = cloud_result["data"]
+
+            # Check if pipeline already exists locally
+            existing = self.data.query(
+                "SELECT pipeline_id FROM pipelines WHERE pipeline_id = ?",
+                (pipeline_id,)
+            )
+
+            if existing:
+                # Already exists, skip
+                logger.info(f"Pipeline {pipeline_id} already exists locally, skipping")
+                result["success"] = True
+                return result
+
+            # Insert pipeline
+            self.data.insert("pipelines", {
+                "pipeline_id": pipeline_data["pipeline_id"],
+                "name": pipeline_data.get("name"),
+                "start_timestamp": pipeline_data.get("start_timestamp"),
+                "end_timestamp": pipeline_data.get("end_timestamp"),
+                "status": pipeline_data.get("status"),
+                "config_json": pipeline_data.get("config_json")
+            })
+
+            # Insert runners and steps
+            for runner_data in pipeline_data.get("runners", []):
+                self.data.insert("runners", {
+                    "runner_id": runner_data["runner_id"],
+                    "pipeline_id": pipeline_id,
+                    "name": runner_data.get("name"),
+                    "execution_order": runner_data.get("execution_order"),
+                    "status": runner_data.get("status")
+                })
+
+                # Insert step outputs
+                for step_data in runner_data.get("steps", []):
+                    self.data.insert("steps_output", {
+                        "step_id": step_data.get("step_id"),
+                        "runner_id": runner_data["runner_id"],
+                        "name": step_data.get("name"),
+                        "output_json": step_data.get("output_json"),
+                        "stdout": step_data.get("stdout"),
+                        "stderr": step_data.get("stderr"),
+                        "status": step_data.get("status"),
+                        "duration": step_data.get("duration"),
+                        "timestamp": step_data.get("timestamp")
+                    })
+
+            result["success"] = True
+            logger.info(f"Pulled pipeline run {pipeline_id} from cloud")
+
+        except Exception as e:
+            result["error"] = str(e)
+            logger.error(f"Failed to pull pipeline run {pipeline_id}: {e}")
+
+        return result
 
 
 class CloudSyncHandler:

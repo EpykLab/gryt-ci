@@ -378,3 +378,17 @@ class GrytCloudClient:
     def apply(self, yaml_content: str) -> dict[str, Any]:
         """Apply a YAML configuration."""
         return self._request("POST", "/api/v1/apply", json={"yaml_content": yaml_content})
+
+    # Pipeline Runs
+    def create_pipeline_run(self, pipeline_run_data: dict[str, Any]) -> dict[str, Any]:
+        """Create a pipeline run with all runners and step outputs."""
+        return self._request("POST", "/api/v1/pipeline-runs", json=pipeline_run_data)
+
+    def get_pipeline_run(self, pipeline_id: str) -> dict[str, Any]:
+        """Get a pipeline run by pipeline_id."""
+        return self._request("GET", f"/api/v1/pipeline-runs/{pipeline_id}")
+
+    def list_pipeline_runs(self, team_id: Optional[str] = None) -> dict[str, Any]:
+        """List all pipeline runs."""
+        params = {"team_id": team_id} if team_id else None
+        return self._request("GET", "/api/v1/pipeline-runs", params=params)

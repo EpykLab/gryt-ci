@@ -27,6 +27,12 @@ gryt generation gen-test --all
 gryt generation gen-test [--all or --change] --force
 ```
 
+**Promte a generation to a full release**
+
+```bash
+gryt generation promote <generate ID> [--no-tag (don't recreate git tag, optional)]
+```
+
 ### Evolutions
 
 **Start a new evolution**
