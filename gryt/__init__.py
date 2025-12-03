@@ -35,6 +35,7 @@ from .audit import AuditTrail, export_audit_trail
 from .rollback import RollbackManager
 from .hotfix import HotfixWorkflow, HotfixGate, create_hotfix
 from .compliance import ComplianceReport, generate_compliance_report
+from .auth import Auth, FlyAuth
 from .steps import (
     GoModDownloadStep,
     GoBuildStep,
@@ -45,7 +46,8 @@ from .steps import (
     SvelteBuildStep,
     CargoBuildStep,
     CargoTestStep,
-    ScytheValidator
+    ScytheValidator,
+    FlyDeployStep
 )
 
 __all__ = [
@@ -94,6 +96,11 @@ __all__ = [
     "CargoTestStep",
     # Validators
     "ScytheValidator",
+    # Auth
+    "Auth",
+    "FlyAuth",
+    # Deployment steps
+    "FlyDeployStep",
     # Generations & Evolutions (v0.2.0, v0.3.0)
     "Generation",
     "GenerationChange",

@@ -2,7 +2,8 @@
 Evolution system (v0.3.0)
 
 An Evolution is a point-in-time proof that realizes one or more generation changes.
-Each evolution is tagged with a release candidate version (vX.Y.Z-rc.N).
+Each evolution has a unique code name (e.g., "whispy-monster-pineapple") for identification.
+Tags can be optionally added manually for versioning.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .codename import generate_code_name
 from .data import SqliteData
 from .events import get_event_bus
 from .generation import Generation
@@ -23,10 +25,11 @@ class Evolution:
     An Evolution proves one or more changes from a Generation.
 
     Attributes:
-        evolution_id: Unique identifier
+        evolution_id: Unique identifier (UUID)
         generation_id: Parent generation ID
         change_id: Change being proven
-        tag: RC tag (e.g., "v2.2.0-rc.1")
+        code_name: Human-friendly identifier (e.g., "whispy-monster-pineapple")
+        tag: Optional version tag (e.g., "v2.2.0-rc.1")
         status: pending|running|pass|fail
         pipeline_run_id: Link to pipeline execution
         started_at: When evolution started
@@ -39,7 +42,8 @@ class Evolution:
         self,
         generation_id: str,
         change_id: str,
-        tag: str,
+        code_name: Optional[str] = None,
+        tag: Optional[str] = None,
         evolution_id: Optional[str] = None,
         status: str = "pending",
         pipeline_run_id: Optional[str] = None,
@@ -52,6 +56,7 @@ class Evolution:
         self.evolution_id = evolution_id or str(uuid.uuid4())
         self.generation_id = generation_id
         self.change_id = change_id
+        self.code_name = code_name or generate_code_name()
         self.tag = tag
         self.status = status
         self.pipeline_run_id = pipeline_run_id
@@ -91,7 +96,8 @@ class Evolution:
             evolution_id=row["evolution_id"],
             generation_id=row["generation_id"],
             change_id=row["change_id"],
-            tag=row["tag"],
+            code_name=row["code_name"],
+            tag=row.get("tag"),
             status=row["status"],
             pipeline_run_id=row.get("pipeline_run_id"),
             started_at=started_at,
@@ -115,6 +121,7 @@ class Evolution:
             "evolution_id": self.evolution_id,
             "generation_id": self.generation_id,
             "change_id": self.change_id,
+            "code_name": self.code_name,
             "tag": self.tag,
             "status": self.status,
             "pipeline_run_id": self.pipeline_run_id,
@@ -153,6 +160,7 @@ class Evolution:
             "evolution_id": self.evolution_id,
             "generation_id": self.generation_id,
             "change_id": self.change_id,
+            "code_name": self.code_name,
             "tag": self.tag,
             "status": self.status,
             "pipeline_run_id": self.pipeline_run_id,
@@ -165,14 +173,17 @@ class Evolution:
 
     def create_git_tag(self, repo_path: Optional[Path] = None) -> bool:
         """
-        Create a git tag for this evolution.
+        Create a git tag for this evolution (if tag is set).
 
         Returns True if successful, False otherwise.
         """
+        if not self.tag:
+            return False
+
         repo = repo_path or Path.cwd()
         try:
             # Create annotated tag
-            message = f"Evolution {self.evolution_id}\nChange: {self.change_id}\nStatus: {self.status}"
+            message = f"Evolution {self.code_name}\nChange: {self.change_id}\nStatus: {self.status}"
             subprocess.run(
                 ["git", "tag", "-a", self.tag, "-m", message],
                 cwd=repo,
@@ -182,6 +193,16 @@ class Evolution:
             return True
         except subprocess.CalledProcessError:
             return False
+
+    @classmethod
+    def from_code_name(cls, data: SqliteData, code_name: str) -> Optional[Evolution]:
+        """Load an Evolution by its code name"""
+        rows = data.query(
+            "SELECT evolution_id FROM evolutions WHERE code_name = ?", (code_name,)
+        )
+        if not rows:
+            return None
+        return cls.from_db(data, rows[0]["evolution_id"])
 
     @staticmethod
     def list_for_generation(data: SqliteData, generation_id: str) -> List[Evolution]:
@@ -236,7 +257,8 @@ class Evolution:
         data: SqliteData,
         version: str,
         change_id: str,
-        auto_tag: bool = True,
+        tag: Optional[str] = None,
+        auto_tag: bool = False,
         repo_path: Optional[Path] = None,
         created_by: Optional[str] = None,
     ) -> Evolution:
@@ -245,9 +267,18 @@ class Evolution:
 
         This will:
         1. Validate the generation and change exist
-        2. Generate the next RC tag
+        2. Generate a unique code name
         3. Create the evolution record
-        4. Optionally create a git tag
+        4. Optionally create a git tag if tag is provided and auto_tag is True
+
+        Args:
+            data: Database instance
+            version: Generation version (e.g., "v2.2.0" or "2.2.0")
+            change_id: ID of the change to prove
+            tag: Optional git tag to create (e.g., "v2.2.0-rc.1")
+            auto_tag: If True and tag is provided, create git tag automatically
+            repo_path: Path to git repository
+            created_by: User creating the evolution
 
         Returns the created Evolution.
         """
@@ -272,13 +303,17 @@ class Evolution:
         if not change_rows:
             raise ValueError(f"Change {change_id} not found in generation {version}")
 
-        # Generate next RC tag
-        tag = Evolution.generate_next_rc_tag(data, version)
+        # Generate unique code name
+        code_name = generate_code_name()
+        # Ensure uniqueness
+        while data.query("SELECT 1 FROM evolutions WHERE code_name = ?", (code_name,)):
+            code_name = generate_code_name()
 
         # Create evolution
         evolution = Evolution(
             generation_id=generation_id,
             change_id=change_id,
+            code_name=code_name,
             tag=tag,
             status="pending",
             created_by=created_by,
@@ -286,8 +321,8 @@ class Evolution:
 
         evolution.save_to_db(data)
 
-        # Create git tag if requested
-        if auto_tag:
+        # Create git tag if requested and tag is provided
+        if auto_tag and tag:
             evolution.create_git_tag(repo_path)
 
         return evolution

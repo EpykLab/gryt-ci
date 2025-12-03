@@ -21,6 +21,10 @@ from .validators import (
     ScytheValidator,
 )
 
+from .deployments import (
+    FlyDeployStep,
+)
+
 
 __all__ = [
     # language-specific steps
@@ -37,4 +41,7 @@ __all__ = [
 
     # validation-specific steps
     "ScytheValidator",
+
+    # deployment-specific steps
+    "FlyDeployStep",
 ]

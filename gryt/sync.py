@@ -335,6 +335,7 @@ class CloudSync:
 
                 if not cloud_change:
                     result["errors"].append({
+                        "code_name": evo.code_name,
                         "tag": evo.tag,
                         "error": f"Change {evo.change_id} not found in cloud generation"
                     })
@@ -352,7 +353,7 @@ class CloudSync:
                     pipeline_result = self.push_pipeline_run(evo.pipeline_run_id, team_id)
                     if not pipeline_result["success"]:
                         # Log warning but continue - pipeline push failure shouldn't block evolution sync
-                        logger.warning(f"Failed to push pipeline {evo.pipeline_run_id} for evolution {evo.tag}: {pipeline_result.get('error')}")
+                        logger.warning(f"Failed to push pipeline {evo.pipeline_run_id} for evolution {evo.code_name}: {pipeline_result.get('error')}")
 
                 # Get the cloud DB id for this change
                 # We need to query the cloud API to get the change's internal DB id
@@ -364,6 +365,7 @@ class CloudSync:
                     "evolution_id": evo.evolution_id,
                     "generation_id": str(cloud_gen_db_id),  # Convert to string for Pydantic validation
                     "change_id": evo.change_id,  # String like "DB-001" - API will look it up
+                    "code_name": evo.code_name,
                     "tag": evo.tag,
                     "status": evo.status,
                     "pipeline_run_id": evo.pipeline_run_id,
@@ -451,6 +453,7 @@ class CloudSync:
 
             except Exception as e:
                 result["errors"].append({
+                    "code_name": evo.code_name,
                     "tag": evo.tag,
                     "error": str(e)
                 })
@@ -531,7 +534,8 @@ class CloudSync:
         )
         evolutions = [
             {
-                "tag": evo["tag"],
+                "code_name": evo["code_name"],
+                "tag": evo.get("tag"),
                 "sync_status": evo.get("sync_status", "not_synced"),
                 "remote_id": evo.get("remote_id"),
             }
@@ -769,7 +773,8 @@ class CloudSync:
                     "evolution_id": cloud_evo["evolution_id"],
                     "generation_id": generation_id,  # Use consistent generation_id
                     "change_id": cloud_evo["change_id"],  # API now returns string change_id
-                    "tag": cloud_evo["tag"],
+                    "code_name": cloud_evo["code_name"],
+                    "tag": cloud_evo.get("tag"),
                     "status": cloud_evo["status"],
                     "pipeline_run_id": pipeline_run_id,  # Use validated pipeline_run_id or None
                     "started_at": cloud_evo.get("started_at"),
@@ -788,18 +793,18 @@ class CloudSync:
                         "evolution_id = ?",
                         (cloud_evo["evolution_id"],)
                     )
-                    logger.info(f"  Updated evolution {cloud_evo['tag']} from cloud")
+                    logger.info(f"  Updated evolution {cloud_evo['code_name']} from cloud")
                 else:
                     # Insert new evolution
                     self.data.insert("evolutions", evolution_data)
-                    logger.info(f"  Inserted evolution {cloud_evo['tag']} from cloud")
+                    logger.info(f"  Inserted evolution {cloud_evo['code_name']} from cloud")
 
                 # Pull associated pipeline run if it exists
                 if pipeline_run_id:
                     # Try to pull the pipeline run (if not already local)
                     pipeline_result = self.pull_pipeline_run(pipeline_run_id)
                     if not pipeline_result["success"] and pipeline_result["error"] != "Pipeline run not found in cloud":
-                        logger.warning(f"  Failed to pull pipeline {pipeline_run_id} for evolution {cloud_evo['tag']}: {pipeline_result.get('error')}")
+                        logger.warning(f"  Failed to pull pipeline {pipeline_run_id} for evolution {cloud_evo['code_name']}: {pipeline_result.get('error')}")
 
         except Exception as e:
             logger.error(f"Failed to pull evolutions for generation {cloud_gen['version']}: {e}")
@@ -839,6 +844,54 @@ class CloudSync:
             runners_data = []
             step_outputs_data = []
 
+            # If no runners exist, check if we have orphaned step outputs and create a synthetic runner
+            if not runners_rows:
+                orphaned_steps = self.data.query(
+                    "SELECT * FROM steps_output WHERE runner_id IS NULL OR runner_id = '' ORDER BY timestamp",
+                    ()
+                )
+
+                if orphaned_steps:
+                    # Create a synthetic runner for orphaned steps
+                    import uuid
+                    synthetic_runner_id = f"{pipeline_id}-default-runner"
+
+                    runners_data.append({
+                        "runner_id": synthetic_runner_id,
+                        "pipeline_id": pipeline_id,
+                        "name": "Pipeline Steps",
+                        "execution_order": 0,
+                        "status": pipeline.get("status")
+                    })
+
+                    # Associate orphaned steps with the synthetic runner
+                    for step_row in orphaned_steps:
+                        import json
+                        output_json = step_row.get("output_json")
+                        if output_json and not isinstance(output_json, str):
+                            output_json = json.dumps(output_json)
+
+                        # Ensure stdout and stderr are strings (not dicts)
+                        stdout = step_row.get("stdout")
+                        if stdout and not isinstance(stdout, str):
+                            stdout = json.dumps(stdout)
+
+                        stderr = step_row.get("stderr")
+                        if stderr and not isinstance(stderr, str):
+                            stderr = json.dumps(stderr)
+
+                        step_outputs_data.append({
+                            "step_id": step_row.get("step_id"),
+                            "runner_id": synthetic_runner_id,
+                            "name": step_row.get("name"),
+                            "output_json": output_json,
+                            "stdout": stdout,
+                            "stderr": stderr,
+                            "status": step_row.get("status"),
+                            "duration": step_row.get("duration"),
+                            "timestamp": step_row.get("timestamp")
+                        })
+
             for runner_row in runners_rows:
                 runner_id = runner_row["runner_id"]
                 runners_data.append({
@@ -856,19 +909,40 @@ class CloudSync:
                 )
 
                 for step_row in steps_rows:
+                    import json
+                    output_json = step_row.get("output_json")
+                    # Ensure output_json is a string
+                    if output_json and not isinstance(output_json, str):
+                        output_json = json.dumps(output_json)
+
+                    # Ensure stdout and stderr are strings (not dicts)
+                    stdout = step_row.get("stdout")
+                    if stdout and not isinstance(stdout, str):
+                        stdout = json.dumps(stdout)
+
+                    stderr = step_row.get("stderr")
+                    if stderr and not isinstance(stderr, str):
+                        stderr = json.dumps(stderr)
+
                     step_outputs_data.append({
                         "step_id": step_row.get("step_id"),
                         "runner_id": runner_id,
                         "name": step_row.get("name"),
-                        "output_json": step_row.get("output_json"),
-                        "stdout": step_row.get("stdout"),
-                        "stderr": step_row.get("stderr"),
+                        "output_json": output_json,
+                        "stdout": stdout,
+                        "stderr": stderr,
                         "status": step_row.get("status"),
                         "duration": step_row.get("duration"),
                         "timestamp": step_row.get("timestamp")
                     })
 
             # Build the batch request
+            import json
+            config_json = pipeline.get("config_json")
+            # Ensure config_json is a string
+            if config_json and not isinstance(config_json, str):
+                config_json = json.dumps(config_json)
+
             batch_data = {
                 "pipeline_run": {
                     "pipeline_id": pipeline_id,
@@ -876,7 +950,7 @@ class CloudSync:
                     "start_timestamp": pipeline.get("start_timestamp"),
                     "end_timestamp": pipeline.get("end_timestamp"),
                     "status": pipeline.get("status"),
-                    "config_json": pipeline.get("config_json"),
+                    "config_json": config_json,
                     "team_id": team_id
                 },
                 "runners": runners_data,
@@ -884,13 +958,23 @@ class CloudSync:
             }
 
             # Push to cloud
-            cloud_result = self.client.create_pipeline_run(batch_data)
+            try:
+                cloud_result = self.client.create_pipeline_run(batch_data)
 
-            if "data" in cloud_result:
-                result["success"] = True
-                logger.info(f"Pushed pipeline run {pipeline_id} to cloud with {len(runners_data)} runners and {len(step_outputs_data)} steps")
-            else:
-                result["error"] = f"Unexpected API response: {cloud_result}"
+                if "data" in cloud_result:
+                    result["success"] = True
+                    logger.info(f"Pushed pipeline run {pipeline_id} to cloud with {len(runners_data)} runners and {len(step_outputs_data)} steps")
+                else:
+                    result["error"] = f"Unexpected API response: {cloud_result}"
+            except Exception as create_error:
+                error_str = str(create_error)
+                # If it's a duplicate key error, just log and treat as success
+                if "duplicate key" in error_str.lower() or "already exists" in error_str.lower() or "UniqueViolation" in error_str:
+                    logger.info(f"Pipeline run {pipeline_id} already exists in cloud, skipping")
+                    result["success"] = True
+                else:
+                    # Real error, re-raise
+                    raise
 
         except Exception as e:
             result["error"] = str(e)

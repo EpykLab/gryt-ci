@@ -261,7 +261,8 @@ class SqliteData(Data):
                     evolution_id TEXT PRIMARY KEY,
                     generation_id TEXT NOT NULL,
                     change_id TEXT NOT NULL,
-                    tag TEXT UNIQUE NOT NULL,
+                    code_name TEXT UNIQUE NOT NULL,
+                    tag TEXT,
                     status TEXT DEFAULT 'pending',
                     pipeline_run_id TEXT,
                     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -285,6 +286,30 @@ class SqliteData(Data):
                     getattr(self, "_last_migrations_applied", []).append("add evolutions.created_by column")
                 except Exception:
                     pass
+            # Migrate: Add code_name column if missing (v1.1.3)
+            if "code_name" not in evo_cols:
+                # Add code_name column
+                self.conn.execute("ALTER TABLE evolutions ADD COLUMN code_name TEXT")
+                try:
+                    getattr(self, "_last_migrations_applied", []).append("add evolutions.code_name column")
+                except Exception:
+                    pass
+                # Generate code names for existing evolutions
+                from .codename import generate_code_name
+                existing_evos = self.conn.execute("SELECT evolution_id FROM evolutions WHERE code_name IS NULL").fetchall()
+                for evo in existing_evos:
+                    code_name = generate_code_name()
+                    # Ensure uniqueness
+                    while self.conn.execute("SELECT 1 FROM evolutions WHERE code_name = ?", (code_name,)).fetchone():
+                        code_name = generate_code_name()
+                    self.conn.execute(
+                        "UPDATE evolutions SET code_name = ? WHERE evolution_id = ?",
+                        (code_name, evo[0])
+                    )
+                self.conn.commit()
+            # Migrate: Make tag nullable (v1.1.3)
+            # SQLite doesn't support ALTER COLUMN, so we check if tag is NOT NULL in existing rows
+            # New schema has tag as nullable, old evolutions will keep their tags
             # sync_metadata (v1.0.0 - distributed sync)
             self.conn.execute(
                 """
@@ -325,6 +350,18 @@ class SqliteData(Data):
                     FOREIGN KEY (change_id) REFERENCES generation_changes(change_id) ON DELETE CASCADE,
                     FOREIGN KEY (generation_id) REFERENCES generations(generation_id) ON DELETE CASCADE,
                     UNIQUE(change_id, generation_id, pipeline_name)
+                )
+                """
+            )
+            # auth_output (v1.2.0 - authentication tracking)
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS auth_output (
+                    auth_id TEXT PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    output_json TEXT,
+                    status TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )

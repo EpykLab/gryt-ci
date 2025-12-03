@@ -125,15 +125,18 @@ def cmd_evolution_start(
 
         data.close()
 
-        typer.echo(f"✓ Started evolution {evolution.tag}")
+        typer.echo(f"✓ Started evolution {evolution.code_name}")
+        typer.echo(f"  Code name: {evolution.code_name}")
         typer.echo(f"  Evolution ID: {evolution.evolution_id}")
         typer.echo(f"  Change: {change_id}")
         typer.echo(f"  Status: {evolution.status}")
-        if not no_tag:
+        if evolution.tag:
+            typer.echo(f"  Tag: {evolution.tag}")
+        if not no_tag and evolution.tag:
             typer.echo(f"  Git tag created: {evolution.tag}")
 
         typer.echo(f"\nNext steps:")
-        typer.echo(f"  1. Run your pipeline to prove this change")
+        typer.echo(f"  1. Run your pipeline to prove this change: gryt evolution prove {evolution.code_name}")
         typer.echo(f"  2. Use 'gryt evolution list {version}' to see progress")
         typer.echo(f"  3. When all changes are proven, promote with 'gryt generation promote {version}'")
 
@@ -187,15 +190,15 @@ def cmd_evolution_list(version: str) -> int:
             return 0
 
         typer.echo(f"\nEvolutions for {version}:\n")
-        typer.echo(f"{'Tag':<20} {'Change ID':<20} {'Type':<10} {'Status':<12} {'Started':<20}")
-        typer.echo("-" * 100)
+        typer.echo(f"{'Code Name':<30} {'Change ID':<20} {'Type':<10} {'Status':<12} {'Started':<20}")
+        typer.echo("-" * 110)
 
         for evo in evolutions:
             change_info = changes_map.get(evo.change_id, {})
             change_type = change_info.get("type", "?")
             started = evo.started_at.strftime("%Y-%m-%d %H:%M") if evo.started_at else "?"
             typer.echo(
-                f"{evo.tag:<20} {evo.change_id:<20} {change_type:<10} {evo.status:<12} {started:<20}"
+                f"{evo.code_name:<30} {evo.change_id:<20} {change_type:<10} {evo.status:<12} {started:<20}"
             )
 
         # Summary
@@ -218,10 +221,10 @@ def cmd_evolution_prove(evolution_id: str, pipeline_filter: Optional[str] = None
     try:
         data = _get_db()
 
-        # Load evolution
+        # Load evolution by evolution_id, code_name, or tag
         evolution_rows = data.query(
-            "SELECT evolution_id, generation_id, change_id, status, tag FROM evolutions WHERE evolution_id = ? OR tag = ?",
-            (evolution_id, evolution_id),
+            "SELECT evolution_id, generation_id, change_id, status, code_name, tag FROM evolutions WHERE evolution_id = ? OR code_name = ? OR tag = ?",
+            (evolution_id, evolution_id, evolution_id),
         )
         if not evolution_rows:
             typer.echo(f"Error: Evolution '{evolution_id}' not found", err=True)
@@ -232,7 +235,8 @@ def cmd_evolution_prove(evolution_id: str, pipeline_filter: Optional[str] = None
         evo_id = evolution["evolution_id"]
         gen_id = evolution["generation_id"]
         change_id = evolution["change_id"]
-        evo_tag = evolution["tag"]
+        evo_code_name = evolution["code_name"]
+        evo_tag = evolution.get("tag")
 
         # Load change details
         change_rows = data.query(
@@ -266,7 +270,9 @@ def cmd_evolution_prove(evolution_id: str, pipeline_filter: Optional[str] = None
                 data.close()
                 return 2
 
-        typer.echo(f"Proving evolution: {evo_tag}")
+        typer.echo(f"Proving evolution: {evo_code_name}")
+        if evo_tag:
+            typer.echo(f"  Tag: {evo_tag}")
         typer.echo(f"  Change: {change_id} - {change_title}")
         typer.echo(f"  Pipelines to run: {len(pipeline_links)}")
         for link in pipeline_links:
@@ -311,7 +317,7 @@ def cmd_evolution_prove(evolution_id: str, pipeline_filter: Optional[str] = None
                         "pipeline_id": pipeline_id,
                         "name": pipeline_filename,
                         "start_timestamp": pipeline_start.isoformat(),
-                        "config_json": json.dumps({"evolution_id": evo_id, "tag": evo_tag, "sequence": idx}),
+                        "config_json": json.dumps({"evolution_id": evo_id, "code_name": evo_code_name, "tag": evo_tag, "sequence": idx}),
                     },
                 )
                 data.commit()
@@ -407,9 +413,9 @@ def cmd_evolution_prove(evolution_id: str, pipeline_filter: Optional[str] = None
             # Display overall results
             typer.echo("=" * 60)
             if overall_status == "pass":
-                typer.echo(f"✓ Evolution {evo_tag} PASSED")
+                typer.echo(f"✓ Evolution {evo_code_name} PASSED")
             else:
-                typer.echo(f"✗ Evolution {evo_tag} FAILED")
+                typer.echo(f"✗ Evolution {evo_code_name} FAILED")
 
             typer.echo(f"  Total duration: {(end_time - start_time).total_seconds():.2f}s")
             typer.echo(f"  Pipelines run: {len(all_pipeline_runs)}")
@@ -616,7 +622,7 @@ def list_command(
 
 @evolution_app.command("prove", help="Prove an evolution by running its validation pipeline(s)")
 def prove_command(
-    evolution_id: str = typer.Argument(..., help="Evolution ID or tag (e.g., v2.2.0-rc.1)"),
+    evolution_id: str = typer.Argument(..., help="Evolution code name, ID, or tag (e.g., whispy-monster-pineapple)"),
     pipeline: Optional[str] = typer.Option(None, "--pipeline", help="Run only this specific pipeline (default: run all linked pipelines)"),
     parallel: bool = typer.Option(False, "--parallel", help="Run pipeline runners in parallel"),
     show: bool = typer.Option(False, "--show", "-s", help="Show pipeline output in real-time"),
