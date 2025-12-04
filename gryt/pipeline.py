@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import concurrent.futures
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .data import Data
 from .runner import Runner
 from .runtime import Runtime
 from .versioning import Versioning
+
+if TYPE_CHECKING:
+    from .auth import Auth
 
 
 class Pipeline:
@@ -21,6 +24,7 @@ class Pipeline:
         hook: Optional["Hook"] = None,
         destinations: Optional[List["Destination"]] = None,
         validators: Optional[List["EnvValidator"]] = None,
+        auth_steps: Optional[List["Auth"]] = None,
     ) -> None:
         self.runners = runners
         self.data = data
@@ -29,6 +33,7 @@ class Pipeline:
         self.hook = hook
         self.destinations = destinations or []
         self.validators = validators or []
+        self.auth_steps = auth_steps or []
 
     def validate_environment(self) -> Dict[str, Any]:
         """Run all configured validators and return a report without raising."""
@@ -73,6 +78,21 @@ class Pipeline:
                 self.hook.on_pipeline_start(self, context=None)
             except Exception:
                 pass
+
+        # Execute all auth steps before anything else
+        if self.auth_steps:
+            for auth_step in self.auth_steps:
+                if not auth_step.is_authenticated():
+                    auth_result = auth_step.authenticate()
+                    if auth_result.get("status") != "success":
+                        # Auth failed, return error immediately
+                        return {
+                            "status": "error",
+                            "error": "Authentication failed",
+                            "auth_id": auth_step.id,
+                            "auth_result": auth_result
+                        }
+
         if self.runtime:
             self.runtime.provision()
         try:

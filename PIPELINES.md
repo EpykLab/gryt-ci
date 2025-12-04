@@ -281,6 +281,222 @@ class BenchmarkStep(Step):
 
 ---
 
+## Authentication
+
+### Pipeline-Level Authentication
+
+Authentication steps can be configured at the pipeline level to execute before any runners. This is useful for authenticating to external services like container registries, cloud providers, or deployment platforms.
+
+```python
+from gryt import Pipeline, Runner, FlyDeployStep
+from gryt.auth import FlyAuth, DockerRegistryAuth
+
+# Create authentication steps
+fly_auth = FlyAuth(
+    id="fly-auth",
+    config={"token_env_var": "FLY_API_TOKEN"}
+)
+
+ghcr_auth = DockerRegistryAuth(
+    id="ghcr-auth",
+    config={
+        "registry": "ghcr.io",
+        "username_env_var": "GITHUB_USERNAME",
+        "token_env_var": "GITHUB_TOKEN"
+    }
+)
+
+# Create deployment steps (no auth parameter needed)
+deploy_step = FlyDeployStep(
+    id="deploy",
+    config={"app": "my-app", "image": "ghcr.io/user/app:latest"}
+)
+
+# Pass auth steps to pipeline
+pipeline = Pipeline(
+    runners=[Runner(steps=[deploy_step])],
+    auth_steps=[ghcr_auth, fly_auth]  # Execute before runners
+)
+```
+
+**Execution Order:**
+1. All auth steps execute sequentially
+2. If any auth step fails, pipeline execution stops
+3. Once all auth steps succeed, runners execute
+
+### Available Auth Types
+
+#### FlyAuth
+
+Authenticate to Fly.io using API token.
+
+```python
+from gryt.auth import FlyAuth
+
+fly_auth = FlyAuth(
+    id="fly-auth",
+    config={
+        "token_env_var": "FLY_API_TOKEN",  # Default
+        "timeout": 30  # Optional timeout in seconds
+    }
+)
+```
+
+Set the environment variable before running:
+```bash
+export FLY_API_TOKEN="your-fly-api-token"
+```
+
+#### DockerRegistryAuth
+
+Authenticate to Docker container registries (ghcr.io, Docker Hub, GitLab, etc.).
+
+```python
+from gryt.auth import DockerRegistryAuth
+
+# GitHub Container Registry
+ghcr_auth = DockerRegistryAuth(
+    id="ghcr-auth",
+    config={
+        "registry": "ghcr.io",
+        "username_env_var": "GITHUB_USERNAME",  # Default: DOCKER_USERNAME
+        "token_env_var": "GITHUB_TOKEN",  # Default: DOCKER_TOKEN
+        "timeout": 30  # Optional
+    }
+)
+
+# Docker Hub
+dockerhub_auth = DockerRegistryAuth(
+    id="dockerhub-auth",
+    config={
+        "registry": "docker.io",  # Default
+        "username_env_var": "DOCKER_USERNAME",
+        "token_env_var": "DOCKER_TOKEN"
+    }
+)
+
+# GitLab Container Registry
+gitlab_auth = DockerRegistryAuth(
+    id="gitlab-auth",
+    config={
+        "registry": "registry.gitlab.com",
+        "username_env_var": "GITLAB_USERNAME",
+        "token_env_var": "GITLAB_TOKEN"
+    }
+)
+```
+
+Set environment variables:
+```bash
+export GITHUB_USERNAME="your-username"
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+```
+
+### Multi-Registry Example
+
+Authenticate to multiple registries in a single pipeline:
+
+```python
+from gryt import Pipeline, Runner, CommandStep
+from gryt.auth import DockerRegistryAuth
+
+# Authenticate to multiple registries
+ghcr_auth = DockerRegistryAuth(
+    id="ghcr",
+    config={"registry": "ghcr.io"}
+)
+
+dockerhub_auth = DockerRegistryAuth(
+    id="dockerhub",
+    config={"registry": "docker.io"}
+)
+
+# Build and push to multiple registries
+build_step = CommandStep(
+    id="build",
+    config={"cmd": ["docker", "build", "-t", "myapp:latest", "."]}
+)
+
+push_ghcr = CommandStep(
+    id="push-ghcr",
+    config={"cmd": ["docker", "tag", "myapp:latest", "ghcr.io/user/myapp:latest",
+                    "&&", "docker", "push", "ghcr.io/user/myapp:latest"]}
+)
+
+push_dockerhub = CommandStep(
+    id="push-dockerhub",
+    config={"cmd": ["docker", "tag", "myapp:latest", "user/myapp:latest",
+                    "&&", "docker", "push", "user/myapp:latest"]}
+)
+
+pipeline = Pipeline(
+    runners=[Runner(steps=[build_step, push_ghcr, push_dockerhub])],
+    auth_steps=[ghcr_auth, dockerhub_auth]
+)
+```
+
+### CI/CD Integration
+
+Use auth steps in CI/CD environments:
+
+```python
+#!/usr/bin/env python3
+from gryt import Pipeline, Runner, CommandStep, SqliteData, LocalRuntime
+from gryt.auth import DockerRegistryAuth, FlyAuth
+
+data = SqliteData(db_path='.gryt/gryt.db')
+runtime = LocalRuntime()
+
+# Auth steps for CI/CD
+ghcr_auth = DockerRegistryAuth(
+    id="ghcr",
+    config={"registry": "ghcr.io"},
+    data=data
+)
+
+fly_auth = FlyAuth(
+    id="fly",
+    config={"token_env_var": "FLY_API_TOKEN"},
+    data=data
+)
+
+# Build and deploy pipeline
+runner = Runner([
+    CommandStep("build", {"cmd": ["docker", "build", "-t", "ghcr.io/user/app:${VERSION}", "."]}),
+    CommandStep("push", {"cmd": ["docker", "push", "ghcr.io/user/app:${VERSION}"]}),
+    FlyDeployStep("deploy", {"app": "my-app", "image": "ghcr.io/user/app:${VERSION}"})
+], data=data)
+
+PIPELINE = Pipeline(
+    runners=[runner],
+    auth_steps=[ghcr_auth, fly_auth],
+    data=data,
+    runtime=runtime
+)
+```
+
+### Migration from Step-Level Auth
+
+**Old approach** (deprecated):
+```python
+# Don't do this
+deploy_step = FlyDeployStep(
+    id="deploy",
+    auth=fly_auth  # ❌ Deprecated
+)
+```
+
+**New approach** (recommended):
+```python
+# Do this instead
+pipeline = Pipeline(
+    runners=[Runner(steps=[deploy_step])],
+    auth_steps=[fly_auth]  # ✅ Correct
+)
+```
+
+---
+
 ## Hooks and Events
 
 ### Pipeline Lifecycle Hooks

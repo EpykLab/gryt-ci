@@ -35,7 +35,7 @@ from .audit import AuditTrail, export_audit_trail
 from .rollback import RollbackManager
 from .hotfix import HotfixWorkflow, HotfixGate, create_hotfix
 from .compliance import ComplianceReport, generate_compliance_report
-from .auth import Auth, FlyAuth
+from .auth import Auth, FlyAuth, DockerRegistryAuth
 from .steps import (
     GoModDownloadStep,
     GoBuildStep,
@@ -99,6 +99,7 @@ __all__ = [
     # Auth
     "Auth",
     "FlyAuth",
+    "DockerRegistryAuth",
     # Deployment steps
     "FlyDeployStep",
     # Generations & Evolutions (v0.2.0, v0.3.0)

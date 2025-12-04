@@ -27,6 +27,7 @@ Tip: If you re-run a pipeline using the same step ids into the same DB file, `st
 - Can be provided a `Runtime` to provision/teardown an environment around the run.
 - Optional Hook to observe pipeline lifecycle and step events.
 - Optional Destinations to publish artifacts after execution. Pass artifacts via `execute(artifacts=[...])`.
+- Optional auth_steps: List of Auth instances that execute sequentially before any runners. If any auth step fails, pipeline execution stops.
 
 ## Runtime
 - Abstract provisioning interface.
@@ -36,6 +37,28 @@ Tip: If you re-run a pipeline using the same step ids into the same DB file, `st
 ## Versioning
 - `SimpleVersioning` implements a minimal semver bump based on the latest git tag.
 - You can call `bump_version(level)` and `tag_release(version, message)` outside pipeline execution (e.g., in a release script).
+
+## Auth
+- Abstract base class for authentication mechanisms.
+- Auth instances can be passed to Pipeline via `auth_steps` parameter.
+- All auth steps execute sequentially **before** any pipeline runners start.
+- If any auth step fails, pipeline execution stops immediately.
+- Built-in implementations:
+  - **FlyAuth**: Authenticate to Fly.io using API token from environment variable.
+  - **DockerRegistryAuth**: Authenticate to Docker container registries (ghcr.io, Docker Hub, GitLab, etc.).
+- Auth results are tracked in the database (if Data is provided).
+- Example usage:
+  ```python
+  from gryt.auth import FlyAuth, DockerRegistryAuth
+
+  fly_auth = FlyAuth(id="fly", config={"token_env_var": "FLY_API_TOKEN"})
+  ghcr_auth = DockerRegistryAuth(id="ghcr", config={"registry": "ghcr.io"})
+
+  pipeline = Pipeline(
+      runners=[...],
+      auth_steps=[ghcr_auth, fly_auth]
+  )
+  ```
 
 ## Environment Validation
 - Optional validators can be attached to a Pipeline to check the environment before any steps run.

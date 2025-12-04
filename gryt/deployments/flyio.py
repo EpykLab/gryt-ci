@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
 from ..step import CommandStep, Step
-
-if TYPE_CHECKING:
-    from ..auth import Auth
 
 
 class FlyDeployStep(Step):
     """Deploy an application to Fly.io.
 
-    Optional Auth:
-    - auth: Auth (optional) – Auth instance (e.g., FlyAuth) to authenticate before deployment.
-                              Useful in cloud/CI environments where credentials need to be configured.
+    Note: Authentication should now be handled at the Pipeline level using auth_steps.
+          Pass FlyAuth to Pipeline's auth_steps parameter instead of to this step.
 
     Config:
     - app: str (optional) – Fly.io app name. If not provided, uses app name from fly.toml
@@ -37,21 +33,10 @@ class FlyDeployStep(Step):
     - retries: int (optional) – retry count on failure (default: 0)
     """
 
-    def __init__(self, id: str, config: Optional[Dict[str, Any]] = None, data: Optional[Any] = None, hook: Optional[Any] = None, auth: Optional["Auth"] = None) -> None:
+    def __init__(self, id: str, config: Optional[Dict[str, Any]] = None, data: Optional[Any] = None, hook: Optional[Any] = None) -> None:
         super().__init__(id, config, data, hook)
-        self.auth = auth
 
     def run(self) -> Dict[str, Any]:
-        # Authenticate if auth is provided
-        if self.auth and not self.auth.is_authenticated():
-            auth_result = self.auth.authenticate()
-            if auth_result.get("status") != "success":
-                # Authentication failed, return error
-                return {
-                    "status": "error",
-                    "error": f"Authentication failed: {auth_result.get('error', 'Unknown error')}",
-                    "auth_result": auth_result
-                }
         cfg = self.config
         app: Optional[str] = cfg.get("app")
         config: str = cfg.get("config", "fly.toml")

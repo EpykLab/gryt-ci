@@ -28,30 +28,40 @@ PIPELINE = Pipeline([runner], data=data, runtime=runtime)
 
 ## Authentication
 
-The `FlyDeployStep` supports optional authentication via the `FlyAuth` class. This is especially useful in CI/CD or cloud environments where you cannot use `fly auth login` interactively.
+Authentication to Fly.io should be handled at the **Pipeline level** using the `auth_steps` parameter. This is especially useful in CI/CD or cloud environments where you cannot use `fly auth login` interactively.
 
-### Using FlyAuth
+### Using FlyAuth at Pipeline Level
 
 ```python
-from gryt import FlyAuth, FlyDeployStep, Runner, Pipeline, SqliteData, LocalRuntime
+from gryt import FlyDeployStep, Runner, Pipeline, SqliteData, LocalRuntime
+from gryt.auth import FlyAuth
 
 data = SqliteData(db_path='.gryt/gryt.db')
 runtime = LocalRuntime()
 
 # Create auth instance
-fly_auth = FlyAuth('fly_auth', {
-    'token_env_var': 'FLY_API_TOKEN'  # Default
-}, data=data)
+fly_auth = FlyAuth(
+    id='fly_auth',
+    config={'token_env_var': 'FLY_API_TOKEN'},  # Default
+    data=data
+)
 
-# Pass auth to deploy step
-runner = Runner([
-    FlyDeployStep('deploy', {
-        'app': 'my-app',
-        'auto_confirm': True
-    }, data=data, auth=fly_auth)
-], data=data)
+# Create deploy step (no auth parameter)
+deploy_step = FlyDeployStep(
+    id='deploy',
+    config={'app': 'my-app', 'auto_confirm': True},
+    data=data
+)
 
-PIPELINE = Pipeline([runner], data=data, runtime=runtime)
+runner = Runner([deploy_step], data=data)
+
+# Pass auth to pipeline
+PIPELINE = Pipeline(
+    runners=[runner],
+    auth_steps=[fly_auth],  # Auth executes before runners
+    data=data,
+    runtime=runtime
+)
 ```
 
 ### Setting the API Token
@@ -79,17 +89,19 @@ fly_auth = FlyAuth('fly_auth', {
 
 ### How It Works
 
-1. When the `FlyDeployStep` runs, it checks if an `auth` parameter was provided
-2. If auth is provided and not yet authenticated, it calls `auth.authenticate()`
+1. Pipeline checks if `auth_steps` are provided
+2. All auth steps execute sequentially **before** any runners start
 3. The `FlyAuth.authenticate()` method reads the token from the environment variable
 4. It authenticates to Fly.io using `fly auth token` command
 5. Authentication is tracked in the database (if `data` is provided)
-6. Subsequent steps with the same auth instance will skip re-authentication
+6. If authentication succeeds, the auth instance is marked as authenticated
+7. If any auth step fails, pipeline execution stops immediately
+8. Once all auth steps succeed, pipeline runners execute
 
 ### Local Development vs CI/CD
 
-- **Local Development**: You can omit the `auth` parameter if you're already logged in via `fly auth login`
-- **CI/CD**: Use `FlyAuth` with the `FLY_API_TOKEN` environment variable for automated deployments
+- **Local Development**: You can omit `auth_steps` if you're already logged in via `fly auth login`
+- **CI/CD**: Use `FlyAuth` in `auth_steps` with the `FLY_API_TOKEN` environment variable for automated deployments
 
 ## Configuration Options
 
@@ -308,6 +320,7 @@ from gryt import (
     SimpleVersioning,
     ToolValidator,
 )
+from gryt.auth import FlyAuth
 
 data = SqliteData(db_path='.gryt/gryt.db')
 runtime = LocalRuntime()
@@ -320,6 +333,13 @@ validators = [
         {"name": "fly"}
     ])
 ]
+
+# Create auth step for CI/CD
+fly_auth = FlyAuth(
+    id='fly_auth',
+    config={'token_env_var': 'FLY_API_TOKEN'},
+    data=data
+)
 
 runner = Runner([
     PipInstallStep('install_deps', {
@@ -338,18 +358,39 @@ runner = Runner([
     }, data=data)
 ], data=data)
 
-PIPELINE = Pipeline([runner], data=data, runtime=runtime, validators=validators)
+PIPELINE = Pipeline(
+    runners=[runner],
+    auth_steps=[fly_auth],  # Auth runs before all steps
+    data=data,
+    runtime=runtime,
+    validators=validators
+)
 ```
 
 ## Troubleshooting
 
 ### Authentication Issues
 
+**Local Development:**
 If you encounter authentication errors, ensure you're logged in:
 
 ```bash
 fly auth login
 ```
+
+**CI/CD:**
+Ensure the `FLY_API_TOKEN` environment variable is set and contains a valid token:
+
+```bash
+export FLY_API_TOKEN="your-token-here"
+```
+
+Get your token with:
+```bash
+fly auth token
+```
+
+If authentication fails in the pipeline, check the auth step output in the database for details.
 
 ### Build Failures
 
