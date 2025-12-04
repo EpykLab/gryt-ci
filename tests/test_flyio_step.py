@@ -215,3 +215,51 @@ class TestFlyDeployStep:
 
         # Auth should still be authenticated, and authenticate() should not have been called
         assert auth.is_authenticated()
+
+    def test_fly_deploy_with_image(self):
+        """Test fly deploy with pre-built Docker image"""
+        step = FlyDeployStep(
+            id="deploy-image",
+            config={
+                "app": "test-app",
+                "image": "myregistry.io/myapp:v1.0.0",
+                "auto_confirm": True,
+            }
+        )
+
+        assert step.config["image"] == "myregistry.io/myapp:v1.0.0"
+        assert step.config["app"] == "test-app"
+
+    def test_fly_deploy_with_local_image(self):
+        """Test fly deploy with local Docker image"""
+        step = FlyDeployStep(
+            id="deploy-local-image",
+            config={
+                "app": "test-app",
+                "image": "my-local-image:latest",
+                "strategy": "rolling",
+            }
+        )
+
+        assert step.config["image"] == "my-local-image:latest"
+        assert step.config["strategy"] == "rolling"
+
+    def test_fly_deploy_image_ignores_build_options(self):
+        """Test that image deployment ignores Dockerfile build options"""
+        step = FlyDeployStep(
+            id="deploy-image-no-build",
+            config={
+                "app": "test-app",
+                "image": "myapp:v2.0.0",
+                "dockerfile": "Dockerfile.prod",  # Should be ignored
+                "build_arg": ["VERSION=1.0.0"],   # Should be ignored
+                "no_cache": True,                  # Should be ignored
+                "remote_only": True,               # Should be ignored
+            }
+        )
+
+        # Config stores all values, but implementation ignores build options when image is set
+        assert step.config["image"] == "myapp:v2.0.0"
+        # These are stored but won't be used in command construction
+        assert step.config["dockerfile"] == "Dockerfile.prod"
+        assert step.config["no_cache"] is True

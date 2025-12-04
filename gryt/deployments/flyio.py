@@ -18,6 +18,9 @@ class FlyDeployStep(Step):
     Config:
     - app: str (optional) – Fly.io app name. If not provided, uses app name from fly.toml
     - config: str (optional) – path to fly.toml config file (default: fly.toml)
+    - image: str (optional) – pre-built Docker image to deploy (e.g., 'myregistry.io/myapp:v1.0.0')
+                              If specified, skips building and deploys the image directly.
+                              When using 'image', dockerfile/build_arg/no_cache/remote_only are ignored.
     - strategy: str (optional) – deployment strategy: 'rolling', 'immediate', 'canary', 'bluegreen'
     - remote_only: bool (optional) – perform builds remotely on Fly.io (default: False)
     - no_cache: bool (optional) – do not use build cache (default: False)
@@ -52,6 +55,7 @@ class FlyDeployStep(Step):
         cfg = self.config
         app: Optional[str] = cfg.get("app")
         config: str = cfg.get("config", "fly.toml")
+        image: Optional[str] = cfg.get("image")
         strategy: Optional[str] = cfg.get("strategy")
         remote_only: bool = cfg.get("remote_only", False)
         no_cache: bool = cfg.get("no_cache", False)
@@ -74,25 +78,31 @@ class FlyDeployStep(Step):
         if config != "fly.toml":
             cmd += ["--config", config]
 
+        # If image is specified, deploy pre-built image directly
+        if image:
+            cmd.append(f"--image={image}")  # Use equals sign format
+            cmd.append("--local-only")  # Tell Fly to use the image without building
+        else:
+            # Build from source options (only if image not specified)
+            # Remote build options
+            if remote_only:
+                cmd.append("--remote-only")
+
+            # Build cache
+            if no_cache:
+                cmd.append("--no-cache")
+
+            # Dockerfile path
+            if dockerfile:
+                cmd += ["--dockerfile", dockerfile]
+
+            # Build arguments
+            for build_arg in build_args:
+                cmd += ["--build-arg", build_arg]
+
         # Add deployment strategy
         if strategy:
             cmd += ["--strategy", strategy]
-
-        # Remote build options
-        if remote_only:
-            cmd.append("--remote-only")
-
-        # Build cache
-        if no_cache:
-            cmd.append("--no-cache")
-
-        # Dockerfile path
-        if dockerfile:
-            cmd += ["--dockerfile", dockerfile]
-
-        # Build arguments
-        for build_arg in build_args:
-            cmd += ["--build-arg", build_arg]
 
         # Environment variables
         for key, value in env_vars.items():
@@ -116,6 +126,10 @@ class FlyDeployStep(Step):
 
         # Wait timeout
         cmd += ["--wait-timeout", str(wait_timeout)]
+
+        # Debug: print the command being executed
+        print(f"[FlyDeployStep] Executing command: {' '.join(cmd)}")
+        print(f"[FlyDeployStep] Working directory: {cfg.get('cwd')}")
 
         _cs = CommandStep(
             id=f"{self.id}__flydeploy",

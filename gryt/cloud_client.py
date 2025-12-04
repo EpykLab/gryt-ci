@@ -217,6 +217,21 @@ class GrytCloudClient:
             require_auth=False,
         )
 
+    # ConfigMaps
+    def list_configmaps(self, show_secrets: bool = False) -> dict[str, Any]:
+        """List user's ConfigMaps."""
+        params = {"show_secrets": str(show_secrets).lower()}
+        return self._request("GET", "/api/v1/configmaps", params=params)
+
+    def get_configmap(self, configmap_id: str, show_secrets: bool = False) -> dict[str, Any]:
+        """Get a specific ConfigMap."""
+        params = {"show_secrets": str(show_secrets).lower()}
+        return self._request("GET", f"/api/v1/configmaps/{configmap_id}", params=params)
+
+    def delete_configmap(self, configmap_id: str) -> dict[str, Any]:
+        """Delete a specific ConfigMap."""
+        return self._request("DELETE", f"/api/v1/configmaps/{configmap_id}")
+
     # API Keys
     def create_api_key(self, name: str, expires_in_days: Optional[int] = None) -> dict[str, Any]:
         """Create a new API key."""

@@ -225,6 +225,72 @@ runner = Runner([
 ], data=data)
 ```
 
+## Deploying Pre-Built Docker Images
+
+Instead of building from source, you can deploy pre-built Docker images. This is useful when:
+- You've already built and tested an image in your CI/CD pipeline
+- You want to deploy the exact same image to multiple environments
+- You're using a separate build system
+
+### Deploy from Docker Registry
+
+```python
+FlyDeployStep('deploy', {
+    'app': 'my-app',
+    'image': 'myregistry.io/myapp:v1.2.3',  # Pre-built image
+    'auto_confirm': True
+}, data=data)
+```
+
+### Deploy Local Docker Image
+
+If you've built an image locally:
+
+```bash
+# Build your image first
+docker build -t my-local-app:v1.0.0 .
+```
+
+Then deploy it:
+
+```python
+FlyDeployStep('deploy', {
+    'app': 'my-app',
+    'image': 'my-local-app:v1.0.0',  # Local image
+    'auto_confirm': True
+}, data=data)
+```
+
+### Deploy from Docker Hub
+
+```python
+FlyDeployStep('deploy', {
+    'app': 'my-app',
+    'image': 'username/myapp:latest',  # Docker Hub image
+    'strategy': 'rolling',
+    'auto_confirm': True
+}, data=data)
+```
+
+### Deploy with Version Tag
+
+```python
+from gryt import SimpleVersioning
+
+version = SimpleVersioning().get_last_commit_hash()
+image_name = f'myregistry.io/myapp:{version}'
+
+FlyDeployStep('deploy', {
+    'app': 'my-app',
+    'image': image_name,
+    'strategy': 'rolling',
+    'ha': True,
+    'auto_confirm': True
+}, data=data)
+```
+
+**Note:** When using the `image` parameter, build-related options (`dockerfile`, `build_arg`, `no_cache`, `remote_only`) are ignored since no build is performed.
+
 ## Integration with CI/CD
 
 The FlyDeployStep can be integrated into your gryt pipeline for automated deployments:

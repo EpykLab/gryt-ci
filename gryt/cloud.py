@@ -157,12 +157,45 @@ def revoke_api_key(
 
 @cloud_app.command("apply", help="Apply a declarative YAML configuration")
 def apply(
-    yaml_file: typer.FileText = typer.Argument(..., help="Path to the YAML configuration file"),
+    yaml_file: typer.FileText = typer.Argument(
+        None,
+        help="Path to YAML file, or '-' for stdin. Omit to read from stdin."
+    ),
 ):
-    """Apply a declarative YAML configuration (kubectl-style)."""
+    """
+    Apply a declarative YAML configuration (kubectl-style).
+
+    Examples:
+        # Apply from file
+        gryt cloud apply config.yaml
+
+        # Apply from stdin (explicit)
+        cat config.yaml | gryt cloud apply -
+
+        # Apply from stdin (implicit)
+        cat config.yaml | gryt cloud apply
+
+        # Inject secrets from 1Password
+        op inject -i config.yaml | gryt cloud apply
+
+        # Use environment variables with envsubst
+        envsubst < config.yaml | gryt cloud apply
+    """
+    import sys
+
     client = _get_client()
     try:
-        yaml_content = yaml_file.read()
+        # Read from provided file, stdin explicitly with '-', or stdin if no arg
+        if yaml_file:
+            yaml_content = yaml_file.read()
+        else:
+            # No argument provided, read from stdin
+            yaml_content = sys.stdin.read()
+
+        if not yaml_content.strip():
+            typer.echo("Error: No YAML content provided", err=True)
+            raise typer.Exit(1)
+
         result = client.apply(yaml_content=yaml_content)
         typer.echo(json.dumps(result, indent=2))
     except RuntimeError as e:
@@ -446,6 +479,71 @@ def trigger_webhook(
     client = GrytCloudClient()  # No auth needed for webhook trigger
     try:
         result = client.trigger_webhook(webhook_key=key)
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+# ConfigMap Commands
+
+configmap_app = typer.Typer(name="configmaps", help="Manage ConfigMaps (K8s-style environment variables)", no_args_is_help=True)
+cloud_app.add_typer(configmap_app)
+
+
+@configmap_app.command("list", help="List all ConfigMaps")
+def list_configmaps(
+    show_secrets: bool = typer.Option(False, "--show-secrets", "-s", help="Show decrypted secret values"),
+):
+    """
+    List all ConfigMaps accessible to the user.
+
+    By default, secret values are redacted. Use --show-secrets to view decrypted values.
+    """
+    client = _get_client()
+    try:
+        result = client.list_configmaps(show_secrets=show_secrets)
+
+        if show_secrets:
+            typer.echo("⚠️  Warning: Displaying decrypted secrets!", err=True)
+
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@configmap_app.command("get", help="Get a ConfigMap by ID")
+def get_configmap(
+    configmap_id: str = typer.Argument(..., help="ConfigMap ID"),
+    show_secrets: bool = typer.Option(False, "--show-secrets", "-s", help="Show decrypted secret values"),
+):
+    """
+    Get a specific ConfigMap.
+
+    By default, secret values are redacted. Use --show-secrets to view decrypted values.
+    """
+    client = _get_client()
+    try:
+        result = client.get_configmap(configmap_id=configmap_id, show_secrets=show_secrets)
+
+        if show_secrets:
+            typer.echo("⚠️  Warning: Displaying decrypted secrets!", err=True)
+
+        typer.echo(json.dumps(result, indent=2))
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@configmap_app.command("delete", help="Delete a ConfigMap by ID")
+def delete_configmap(
+    configmap_id: str = typer.Argument(..., help="ConfigMap ID"),
+):
+    """Delete a specific ConfigMap."""
+    client = _get_client()
+    try:
+        result = client.delete_configmap(configmap_id=configmap_id)
         typer.echo(json.dumps(result, indent=2))
     except RuntimeError as e:
         typer.echo(f"Error: {e}", err=True)
