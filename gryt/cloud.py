@@ -33,17 +33,24 @@ def _get_client() -> GrytCloudClient:
 @cloud_app.command("login", help="Configure cloud credentials")
 def login(
     method: str = typer.Option("credentials", "--method", "-m", help="Authentication method (credentials or api-key)"),
+    key_id: str = typer.Option(None, "--key-id", "-i", help="key id"),
+    secret_key: str = typer.Option(None, "--secret-key", "-s", help="secret key")
 ):
     """Log in to Gryt Cloud by saving credentials."""
     config = Config.load_with_repo_context()
     if method == "api-key":
-        api_key_id = typer.prompt("API key ID")
-        api_key_secret = typer.prompt("API key secret", hide_input=True)
-        config.set("api_key_id", api_key_id)
-        config.set("api_key_secret", api_key_secret)
-        config.set("username", None)
-        config.set("password", None)
-        typer.echo(f"✓ Logged in with API key {api_key_id}")
+
+        if key_id and secret_key is not None:
+            config.set("api_key_id", key_id)
+            config.set("api_key_secret", secret_key)
+        else:
+            api_key_id = typer.prompt("API key ID")
+            api_key_secret = typer.prompt("API key secret", hide_input=True)
+            config.set("api_key_id", api_key_id)
+            config.set("api_key_secret", api_key_secret)
+            config.set("username", None)
+            config.set("password", None)
+            typer.echo(f"✓ Logged in with API key {api_key_id}")
     elif method == "credentials":
         username = typer.prompt("Username")
         password = typer.prompt("Password", hide_input=True)

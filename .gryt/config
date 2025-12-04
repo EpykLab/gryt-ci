@@ -1,1 +1,3 @@
+api_key_id: something
+api_key_secret: something
 execution_mode: cloud
