@@ -111,6 +111,46 @@ def whoami():
         raise typer.Exit(1)
 
 
+@cloud_app.command("change-password", help="Change your password")
+def change_password(
+    current_password: str = typer.Option(None, "--current-password", "-c", help="Current password (will prompt if not provided)"),
+    new_password: str = typer.Option(None, "--new-password", "-n", help="New password (will prompt if not provided)"),
+):
+    """Change your account password."""
+    config = Config.load_with_repo_context()
+    
+    # Only allow password change with username/password auth, not API keys
+    if config.api_key_id:
+        typer.echo("Error: Password change requires username/password authentication. Please log in with credentials first.", err=True)
+        raise typer.Exit(1)
+    
+    if not config.username or not config.password:
+        typer.echo("Error: Not logged in with credentials. Run 'gryt cloud login' first.", err=True)
+        raise typer.Exit(1)
+    
+    # Prompt for passwords if not provided
+    if not current_password:
+        current_password = typer.prompt("Current password", hide_input=True)
+    if not new_password:
+        new_password = typer.prompt("New password", hide_input=True, confirmation_prompt=True)
+    
+    client = _get_client()
+    try:
+        result = client.change_password(
+            current_password=current_password,
+            new_password=new_password
+        )
+        typer.echo(json.dumps(result, indent=2))
+        
+        # Update saved password in config
+        config.set("password", new_password)
+        config.save()
+        typer.echo(f"✓ Password changed successfully for {config.username}")
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
 # API Key Commands
 
 

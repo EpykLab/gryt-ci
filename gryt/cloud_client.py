@@ -102,6 +102,14 @@ class GrytCloudClient:
             require_auth=False,
         )
 
+    def change_password(self, current_password: str, new_password: str) -> dict[str, Any]:
+        """Change the user's password."""
+        return self._request(
+            "POST",
+            "/api/v1/accounts/change-password",
+            json={"current_password": current_password, "new_password": new_password},
+        )
+
     # Pipelines
     def list_pipelines(self) -> dict[str, Any]:
         """List user's pipelines."""
